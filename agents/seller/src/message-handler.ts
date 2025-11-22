@@ -94,7 +94,7 @@ async function requestCompetingOffers(
       };
       
       await client.sendMessage({ message: requestMessage });
-      if (logger) await logger.log(`Sent competing offer request to ${buyerId}`, 'competing-offer-request');
+      if (logger) await logger.log(`Sent competing offer request to ${buyerId}`, 'competing-offer-request', buyerId, true);
     } catch (error) {
       if (logger) await logger.error(`Failed to send competing offer request to ${buyerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -174,9 +174,9 @@ export async function handleIncomingMessage(
   }
 
   const taskId = task?.id || `task-${Date.now()}`;
-  if (logger) await logger.offerReceived(`[${buyerId}] Received vote offer for proposal: "${offer.proposal.title}"`);
-  if (logger) await logger.log(`Desired outcome: ${offer.desiredOutcome}`, 'info');
-  if (logger) await logger.log(`Offered amount: ${offer.offeredAmount} HBAR per vote`, 'info');
+  if (logger) await logger.offerReceived(`Received vote offer from ${buyerId} for proposal: "${offer.proposal.title}"`, buyerId);
+  if (logger) await logger.log(`Desired outcome: ${offer.desiredOutcome}`, 'info', buyerId);
+  if (logger) await logger.log(`Offered amount: ${offer.offeredAmount} HBAR per vote`, 'info', buyerId);
 
   // Check if this is a continuation of an existing negotiation
   const existingNegotiation = activeNegotiations.get(taskId);
@@ -256,8 +256,9 @@ export async function handleIncomingMessage(
               kind: 'message',
             };
             await client.sendMessage({ message: beatenMessage });
+            if (logger) await logger.log(`Notified original buyer ${buyerId} that offer was beaten`, 'info', buyerId, true);
           } catch (error) {
-            if (logger) await logger.error(`Failed to notify original buyer: ${error instanceof Error ? error.message : String(error)}`);
+            if (logger) await logger.error(`Failed to notify original buyer ${buyerId}: ${error instanceof Error ? error.message : String(error)}`, buyerId);
           }
           
           // Update client reference to the winning buyer
@@ -289,9 +290,10 @@ export async function handleIncomingMessage(
                   kind: 'message',
                 };
                 await losingClient.sendMessage({ message: losingMessage });
+                if (logger) await logger.log(`Notified losing buyer ${competingOffer.buyerId}`, 'info', competingOffer.buyerId, true);
               }
             } catch (error) {
-              if (logger) await logger.error(`Failed to notify losing buyer: ${error instanceof Error ? error.message : String(error)}`);
+              if (logger) await logger.error(`Failed to notify losing buyer ${competingOffer.buyerId}: ${error instanceof Error ? error.message : String(error)}`, competingOffer.buyerId);
             }
           }
         }
@@ -333,19 +335,22 @@ export async function handleIncomingMessage(
     });
 
     if (response.accepted) {
-      if (logger) await logger.negotiationSucceeded(`Negotiation completed successfully!`);
+      if (logger) await logger.negotiationSucceeded(`Negotiation completed successfully with ${buyerId}!`, buyerId);
+      if (logger) await logger.log(`Sent acceptance to ${buyerId}`, 'info', buyerId, true);
       activeNegotiations.delete(taskId);
     } else if (response.counterOffer) {
       // Continue negotiation - wait for buyer's response
       activeNegotiations.set(taskId, negotiationState);
-      if (logger) await logger.log(`Waiting for buyer's response to counter-offer...`, 'negotiation-started');
+      if (logger) await logger.log(`Sent counter-offer to ${buyerId}: ${response.counterOffer} HBAR`, 'info', buyerId, true);
+      if (logger) await logger.log(`Waiting for buyer's response to counter-offer...`, 'negotiation-started', buyerId);
     } else {
       // Rejected - negotiation ended
-      if (logger) await logger.negotiationFailed(`Negotiation ended (rejected)`);
+      if (logger) await logger.negotiationFailed(`Negotiation ended (rejected) with ${buyerId}`);
+      if (logger) await logger.log(`Sent rejection to ${buyerId}`, 'info', buyerId, true);
       activeNegotiations.delete(taskId);
     }
   } catch (error) {
-    if (logger) await logger.error(`Error sending response to buyer: ${error instanceof Error ? error.message : String(error)}`);
+    if (logger) await logger.error(`Error sending response to buyer ${buyerId}: ${error instanceof Error ? error.message : String(error)}`, buyerId);
     // Keep negotiation active in case we can retry
     activeNegotiations.set(taskId, negotiationState);
   }

@@ -4,5 +4,6 @@ export * from './context-loader.js';
 export * from './config-types.js';
 export * from './config-loader.js';
 export * from './logger.js';
+export * from './agent-id-resolver.js';
 export type { TopicMessage } from './proposal-parser.js';
 

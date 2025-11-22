@@ -21,6 +21,8 @@ export interface AgentLogMessage {
   message: string;
   type: MessageType;
   agentId: string;
+  targetAgentId?: string; // ID of the agent this message is about/to
+  isA2AMessage?: boolean; // Whether this represents an actual A2A message sent
 }
 
 /**
@@ -38,12 +40,14 @@ export class AgentLogger {
   /**
    * Log a message both to console and to the website
    */
-  async log(message: string, type: MessageType = 'info'): Promise<void> {
+  async log(message: string, type: MessageType = 'info', targetAgentId?: string, isA2AMessage: boolean = false): Promise<void> {
     const logMessage: AgentLogMessage = {
       timestamp: new Date().toISOString(),
       message,
       type,
       agentId: this.agentId,
+      targetAgentId,
+      isA2AMessage,
     };
 
     // Always console log
@@ -90,40 +94,40 @@ export class AgentLogger {
   }
 
   // Convenience methods for common log types
-  async info(message: string): Promise<void> {
-    return this.log(message, 'info');
+  async info(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'info', targetAgentId);
   }
 
-  async error(message: string): Promise<void> {
-    return this.log(message, 'error');
+  async error(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'error', targetAgentId);
   }
 
-  async success(message: string): Promise<void> {
-    return this.log(message, 'negotiation-succeeded');
+  async success(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'negotiation-succeeded', targetAgentId);
   }
 
   async offerCreated(message: string): Promise<void> {
     return this.log(message, 'offer-created');
   }
 
-  async offerSent(message: string): Promise<void> {
-    return this.log(message, 'offer-sent');
+  async offerSent(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'offer-sent', targetAgentId, true);
   }
 
-  async offerReceived(message: string): Promise<void> {
-    return this.log(message, 'offer-received');
+  async offerReceived(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'offer-received', targetAgentId, true);
   }
 
-  async negotiationStarted(message: string): Promise<void> {
-    return this.log(message, 'negotiation-started');
+  async negotiationStarted(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'negotiation-started', targetAgentId);
   }
 
-  async negotiationSucceeded(message: string): Promise<void> {
-    return this.log(message, 'negotiation-succeeded');
+  async negotiationSucceeded(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'negotiation-succeeded', targetAgentId);
   }
 
-  async negotiationFailed(message: string): Promise<void> {
-    return this.log(message, 'negotiation-failed');
+  async negotiationFailed(message: string, targetAgentId?: string): Promise<void> {
+    return this.log(message, 'negotiation-failed', targetAgentId);
   }
 }
 

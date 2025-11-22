@@ -8,7 +8,7 @@ import { RequestContext, ExecutionEventBus, AgentExecutor } from '@a2a-js/sdk/se
 import { config } from 'dotenv';
 import { loadUserContext, UserContext, getSellerConfig } from './preferences.js';
 import { handleIncomingMessage, handleCompetingOfferResponse } from './message-handler.js';
-import { AgentLogger } from '@dmm/agents-shared';
+import { AgentLogger, getAgentIdFromUrl } from '@dmm/agents-shared';
 
 // Load environment variables
 config();
@@ -98,13 +98,13 @@ async function main() {
   
   // Function to connect to a buyer with retry logic
   async function connectToBuyer(url: string, retryCount: number = 0): Promise<void> {
-    const buyerId = url;
+    const buyerId = getAgentIdFromUrl(url) || url;
     
     try {
-      await globalLogger!.log(`Connecting to buyer agent at ${url}...`, 'info');
+      await globalLogger!.log(`Connecting to buyer agent at ${url} (${buyerId})...`, 'info', buyerId);
       const client = await A2AClient.fromCardUrl(`${url}/.well-known/agent-card.json`);
       buyerClients.set(buyerId, client);
-      await globalLogger!.log(`Connected to buyer agent at ${url}`, 'connection-established');
+      await globalLogger!.log(`Connected to buyer agent ${buyerId} at ${url}`, 'connection-established', buyerId);
       
       // Send a "ready" message to trigger the buyer to send an offer
       try {
@@ -126,9 +126,9 @@ async function main() {
         };
         
         await client.sendMessage({ message: readyMessage });
-        await globalLogger!.log(`Notified buyer that seller is ready`, 'seller-ready');
+        await globalLogger!.log(`Notified buyer ${buyerId} that seller is ready`, 'seller-ready', buyerId, true);
       } catch (error) {
-        await globalLogger!.error(`Failed to send ready message: ${error instanceof Error ? error.message : String(error)}`);
+        await globalLogger!.error(`Failed to send ready message to ${buyerId}: ${error instanceof Error ? error.message : String(error)}`, buyerId);
         // Continue anyway - buyer can still send offers
       }
     } catch (error) {

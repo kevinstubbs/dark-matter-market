@@ -4,7 +4,7 @@ import {
   ExecutionEventBus,
 } from '@a2a-js/sdk/server';
 import { A2AClient } from '@a2a-js/sdk/client';
-import { VoteOffer, VoteOfferResponse, ProposalInfo, CompetingOfferRequest, CompetingOfferResponse, AgentLogger } from '@dmm/agents-shared';
+import { VoteOffer, VoteOfferResponse, ProposalInfo, CompetingOfferRequest, CompetingOfferResponse, AgentLogger, getAgentIdFromUrl } from '@dmm/agents-shared';
 import { loadBuyerContext } from './preferences.js';
 import { createOfferWithLLM } from './llm-evaluator.js';
 
@@ -140,7 +140,8 @@ export class BuyerExecutor implements AgentExecutor {
       
       if (messageData.type === 'seller-ready') {
         // Seller is ready - create a test proposal and send an offer
-        await this.logger.log(`Received seller-ready message from ${messageData.sellerUrl}`, 'seller-ready');
+        const sellerId = getAgentIdFromUrl(messageData.sellerUrl) || 'unknown';
+        await this.logger.log(`Received seller-ready message from ${messageData.sellerUrl} (${sellerId})`, 'seller-ready', sellerId);
         await this.logger.log(`Creating vote purchase offer...`, 'info');
         
         proposal = {
@@ -154,6 +155,7 @@ export class BuyerExecutor implements AgentExecutor {
         
         // Store seller URL for sending the offer
         (requestContext as any).sellerUrl = messageData.sellerUrl;
+        (requestContext as any).sellerId = sellerId;
       } else {
         // This might be a response to our offer - parse it
         throw new Error('Not a seller-ready message');
@@ -208,9 +210,10 @@ export class BuyerExecutor implements AgentExecutor {
     
     // Send the offer to the seller's server
     const sellerUrl = (requestContext as any).sellerUrl;
+    const sellerId = (requestContext as any).sellerId || getAgentIdFromUrl(sellerUrl) || 'unknown';
     if (sellerUrl) {
       try {
-        await this.logger.log(`Sending offer to seller at ${sellerUrl}...`, 'info');
+        await this.logger.log(`Sending offer to seller at ${sellerUrl} (${sellerId})...`, 'info', sellerId);
         const sellerClient = await A2AClient.fromCardUrl(`${sellerUrl}/.well-known/agent-card.json`);
         const { v4: uuidv4 } = await import('uuid');
         
@@ -228,9 +231,9 @@ export class BuyerExecutor implements AgentExecutor {
           },
         });
         
-        await this.logger.offerSent(`Offer sent to seller successfully: ${offer.offeredAmount} HBAR for "${offer.proposal.title}"`);
+        await this.logger.offerSent(`Offer sent to seller ${sellerId}: ${offer.offeredAmount} HBAR for "${offer.proposal.title}"`, sellerId);
       } catch (error) {
-        await this.logger.error(`Failed to send offer to seller: ${error instanceof Error ? error.message : String(error)}`);
+        await this.logger.error(`Failed to send offer to seller ${sellerId}: ${error instanceof Error ? error.message : String(error)}`, sellerId);
       }
     }
     

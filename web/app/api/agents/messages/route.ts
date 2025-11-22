@@ -6,6 +6,8 @@ export interface AgentMessage {
   message: string;
   type: string;
   agentId: string;
+  targetAgentId?: string;
+  isA2AMessage?: boolean;
 }
 
 export async function POST(request: NextRequest) {
