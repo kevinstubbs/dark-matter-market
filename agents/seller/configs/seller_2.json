@@ -2,6 +2,8 @@
   "id": "seller-2",
   "name": "Seller 2 - Price Conscious",
   "port": 4003,
+  "walletAddress": "0.0.7305110",
+  "envFile": ".env.seller-2",
   "instructions": "Minimum 15 HBAR per vote. Willing to sell for any proposal if price is right. Prefer liquidity proposals.",
   "minPrice": "15",
   "buyerUrls": [

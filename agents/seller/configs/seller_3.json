@@ -2,6 +2,8 @@
   "id": "seller-3",
   "name": "Seller 3 - DeFi Supporter",
   "port": 4004,
+  "walletAddress": "0.0.1234571",
+  "envFile": ".env.seller-3",
   "instructions": "Vote yes on liquidity and DeFi proposals. Vote no on governance changes. Minimum 12 HBAR per vote.",
   "minPrice": "12",
   "buyerUrls": [

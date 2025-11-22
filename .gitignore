@@ -32,6 +32,9 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+# Agent-specific env files (contain Hedera secrets)
+agents/**/.env.*
+agents/**/configs/.env.*
 
 # vercel
 .vercel

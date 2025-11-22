@@ -2,6 +2,8 @@
   "id": "seller-5",
   "name": "Seller 5 - Premium Only",
   "port": 4006,
+  "walletAddress": "0.0.1234573",
+  "envFile": ".env.seller-5",
   "instructions": "Only sell votes for high-value proposals. Minimum 20 HBAR per vote. Prefer proposals that increase token value.",
   "minPrice": "20",
   "buyerUrls": [

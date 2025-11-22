@@ -2,6 +2,8 @@
   "id": "buyer-2",
   "name": "Buyer 2 - No Supporter",
   "port": 4002,
+  "walletAddress": "0.0.1234568",
+  "envFile": ".env.buyer-2",
   "instructions": "I want votes against proposals that increase token emissions or reduce rewards. I oppose proposals that dilute token value.",
   "desiredOutcome": "no",
   "maxPrice": "25"
