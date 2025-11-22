@@ -9,12 +9,18 @@ import { loadBuyerContext } from './preferences.js';
 import { createOfferWithLLM } from './llm-evaluator.js';
 
 export class BuyerExecutor implements AgentExecutor {
+  private configPath?: string;
+
+  constructor(configPath?: string) {
+    this.configPath = configPath;
+  }
+
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
     const { taskId, contextId, userMessage } = requestContext;
     
     // Load buyer's plain language context/instructions
     // e.g., "I want votes for proposals that increase liquidity"
-    const buyerContext = await loadBuyerContext();
+    const buyerContext = await loadBuyerContext(this.configPath);
     const desiredOutcome = buyerContext.desiredOutcome;
     
     // Extract message content

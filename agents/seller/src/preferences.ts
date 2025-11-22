@@ -8,8 +8,8 @@ export interface UserContext {
 /**
  * Load user context from config file
  */
-export async function loadUserContext(): Promise<UserContext> {
-  const config = loadSellerConfig();
+export async function loadUserContext(configPath?: string): Promise<UserContext> {
+  const config = loadSellerConfig(configPath);
   
   // Build instructions with minimum price if specified
   let instructions = config.instructions;

@@ -32,14 +32,14 @@ async function main() {
     sellerConfig = configPath ? getSellerConfig(configPath) : getSellerConfig();
   } catch (error) {
     console.error('Error loading seller config:', error);
-    console.error('\nUsage: node dist/index.js [config-file.json]');
+    console.error('\nUsage: node dist/index.js <config-file.json>');
     console.error('Example: node dist/index.js configs/seller_1.json');
     console.error('Or set SELLER_CONFIG environment variable');
     process.exit(1);
   }
   
   // Load user's plain language instructions
-  globalUserContext = await loadUserContext();
+  globalUserContext = await loadUserContext(configPath);
   console.log(`Seller Agent "${sellerConfig.name}"`);
   console.log('Instructions:', globalUserContext.instructions);
   console.log('');

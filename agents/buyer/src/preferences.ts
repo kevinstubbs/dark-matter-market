@@ -9,8 +9,8 @@ export interface BuyerContext {
 /**
  * Load buyer context from config file
  */
-export async function loadBuyerContext(): Promise<BuyerContext> {
-  const config = loadBuyerConfig();
+export async function loadBuyerContext(configPath?: string): Promise<BuyerContext> {
+  const config = loadBuyerConfig(configPath);
   
   // Build instructions with desired outcome if specified
   let instructions = config.instructions;
@@ -31,7 +31,7 @@ export async function loadBuyerContext(): Promise<BuyerContext> {
 /**
  * Get buyer config (for accessing port, name, etc.)
  */
-export function getBuyerConfig(): BuyerConfig {
-  return loadBuyerConfig();
+export function getBuyerConfig(configPath?: string): BuyerConfig {
+  return loadBuyerConfig(configPath);
 }
 
