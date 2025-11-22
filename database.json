@@ -1,0 +1,8 @@
+{
+  "db": {
+    "migrationsDirectory": "database/migrations",
+    "migrationFile": "migration",
+    "migrationFileExtension": "js"
+  }
+}
+
