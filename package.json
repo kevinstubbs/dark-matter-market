@@ -15,7 +15,14 @@
     "cache:topics": "pnpm --filter topic-cache-cli cache:topics",
     "agents:test": "pnpm --filter @dmm/agent-test test",
     "agents:buyer": "pnpm --filter @dmm/agents-buyer start",
-    "agents:seller": "pnpm --filter @dmm/agents-seller start"
+    "agents:buyer:1": "cd agents/buyer && node dist/index.js configs/buyer_1.json",
+    "agents:buyer:2": "cd agents/buyer && node dist/index.js configs/buyer_2.json",
+    "agents:seller": "pnpm --filter @dmm/agents-seller start",
+    "agents:seller:1": "cd agents/seller && node dist/index.js configs/seller_1.json",
+    "agents:seller:2": "cd agents/seller && node dist/index.js configs/seller_2.json",
+    "agents:seller:3": "cd agents/seller && node dist/index.js configs/seller_3.json",
+    "agents:seller:4": "cd agents/seller && node dist/index.js configs/seller_4.json",
+    "agents:seller:5": "cd agents/seller && node dist/index.js configs/seller_5.json"
   },
   "devDependencies": {
     "turbo": "^2.0.0"

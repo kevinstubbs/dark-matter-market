@@ -6,8 +6,8 @@ import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { A2AExpressApp } from '@a2a-js/sdk/server/express';
 import { RequestContext, ExecutionEventBus, AgentExecutor } from '@a2a-js/sdk/server';
 import { config } from 'dotenv';
-import { loadUserContext, UserContext } from './preferences.js';
-import { handleIncomingMessage } from './message-handler.js';
+import { loadUserContext, UserContext, getSellerConfig } from './preferences.js';
+import { handleIncomingMessage, handleCompetingOfferResponse } from './message-handler.js';
 
 // Load environment variables
 config();
@@ -21,15 +21,33 @@ let globalUserContext: UserContext | null = null;
 async function main() {
   console.log('Starting Seller Agent...\n');
   
+  // Load seller config from JSON file
+  // Config file can be specified via:
+  // 1. Command line arg: node dist/index.js configs/seller_1.json
+  // 2. Environment variable: SELLER_CONFIG=configs/seller_1.json
+  // 3. Default: seller.json
+  const configPath = process.argv[2] || process.env.SELLER_CONFIG;
+  let sellerConfig;
+  try {
+    sellerConfig = configPath ? getSellerConfig(configPath) : getSellerConfig();
+  } catch (error) {
+    console.error('Error loading seller config:', error);
+    console.error('\nUsage: node dist/index.js [config-file.json]');
+    console.error('Example: node dist/index.js configs/seller_1.json');
+    console.error('Or set SELLER_CONFIG environment variable');
+    process.exit(1);
+  }
+  
   // Load user's plain language instructions
   globalUserContext = await loadUserContext();
-  console.log('User context loaded:', globalUserContext.instructions);
+  console.log(`Seller Agent "${sellerConfig.name}"`);
+  console.log('Instructions:', globalUserContext.instructions);
   console.log('');
   
   // Set up A2A server to receive messages from buyers
-  const PORT = process.env.SELLER_PORT || 4001;
+  const PORT = sellerConfig.port;
   const agentCard: AgentCard = {
-    name: 'Vote Seller Agent',
+    name: sellerConfig.name,
     version: '0.1.0',
     description: 'Agent that sells voting power for DMM proposals',
     defaultInputModes: ['streaming'],
@@ -62,7 +80,10 @@ async function main() {
   });
   
   // Connect to buyer agents (for sending responses)
-  const buyerUrls = (process.env.BUYER_AGENT_URLS || 'http://localhost:4000').split(',').map(url => url.trim());
+  // Use buyerUrls from config, or fall back to environment variable, or default
+  const buyerUrls = sellerConfig.buyerUrls || 
+                    (process.env.BUYER_AGENT_URLS ? process.env.BUYER_AGENT_URLS.split(',').map(url => url.trim()) : 
+                    ['http://localhost:4000']);
   const RETRY_INTERVAL = 5000; // 5 seconds
   const MAX_RETRIES = Infinity; // Retry indefinitely
   
@@ -117,14 +138,14 @@ async function main() {
   }
   
   // Start connection attempts for all buyers (in parallel, with retries)
-  const connectionPromises = buyerUrls.map(url => connectToBuyer(url));
+  const connectionPromises = buyerUrls.map((url: string) => connectToBuyer(url));
   
   // Don't wait for connections - let them retry in background
   Promise.all(connectionPromises).catch((error) => {
     console.error('Error in buyer connection attempts:', error);
   });
   
-  console.log(`\n✓ Seller agent ready!`);
+  console.log(`\n✓ Seller agent "${sellerConfig.name}" ready!`);
   console.log(`  Listening for vote purchase offers on port ${PORT}`);
   console.log(`  Attempting to connect to ${buyerUrls.length} buyer agent(s)...`);
   console.log(`  (Will retry every ${RETRY_INTERVAL / 1000} seconds if connection fails)\n`);
@@ -163,6 +184,38 @@ class SellerExecutor implements AgentExecutor {
       return;
     }
     
+    // Check if this is a competing offer response
+    const textPart = userMessage.parts.find((p: any) => p.kind === 'text');
+    const messageText = textPart && 'text' in textPart ? textPart.text : '';
+    
+    try {
+      const messageData = JSON.parse(messageText);
+      if (messageData.type === 'competing-offer-response') {
+        // Find which buyer sent this (for now, try to match by checking all buyers)
+        // In production, this would come from message metadata
+        let buyerId = 'unknown';
+        for (const [id] of buyerClients.entries()) {
+          buyerId = id;
+          break; // For MVP, use first buyer
+        }
+        
+        if (buyerId !== 'unknown') {
+          await handleCompetingOfferResponse(buyerId, userMessage);
+        }
+        
+        eventBus.publish({
+          kind: 'task-status-update',
+          taskId,
+          status: { state: 'completed', timestamp: new Date().toISOString() },
+          final: true,
+        } as any);
+        eventBus.finished();
+        return;
+      }
+    } catch (e) {
+      // Not a competing offer response, continue with normal handling
+    }
+    
     // Extract buyer ID - for MVP, use first connected buyer
     // In production, this would come from message metadata or task context
     const buyerId = Array.from(buyerClients.keys())[0] || 'unknown';
@@ -173,8 +226,8 @@ class SellerExecutor implements AgentExecutor {
       return;
     }
     
-    // Handle the incoming message
-    await handleIncomingMessage(buyerId, client, userMessage, task, globalUserContext);
+    // Handle the incoming message (pass all buyer clients for auction mechanism)
+    await handleIncomingMessage(buyerId, client, userMessage, task, globalUserContext, buyerClients);
     
     // Mark task as completed
     eventBus.publish({

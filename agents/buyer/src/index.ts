@@ -5,15 +5,31 @@ import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { A2AExpressApp } from '@a2a-js/sdk/server/express';
 import { config } from 'dotenv';
 import { BuyerExecutor } from './executor.js';
+import { getBuyerConfig } from './preferences.js';
 
-// Load environment variables
+// Load environment variables (for ANTHROPIC_API_KEY, etc.)
 config();
 
-const PORT = process.env.PORT || 4000;
+// Load buyer config from JSON file
+// Config file can be specified via:
+// 1. Command line arg: node dist/index.js buyer_1.json
+// 2. Environment variable: BUYER_CONFIG=buyer_1.json
+// 3. Default: buyer.json
+let buyerConfig;
+try {
+  buyerConfig = getBuyerConfig();
+} catch (error) {
+  console.error('Error loading buyer config:', error);
+  console.error('\nUsage: node dist/index.js [config-file.json]');
+  console.error('Or set BUYER_CONFIG environment variable');
+  process.exit(1);
+}
+
+const PORT = buyerConfig.port;
 
 // Create agent card
 const agentCard: AgentCard = {
-  name: 'Vote Buyer Agent',
+  name: buyerConfig.name,
   version: '0.1.0',
   description: 'Agent that purchases votes for DMM proposals',
   defaultInputModes: ['streaming'],
@@ -42,8 +58,12 @@ a2aApp.setupRoutes(app);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Buyer Agent running on http://localhost:${PORT}`);
+  console.log(`Buyer Agent "${buyerConfig.name}" running on http://localhost:${PORT}`);
   console.log(`Agent card available at http://localhost:${PORT}/.well-known/agent-card.json`);
+  console.log(`Instructions: ${buyerConfig.instructions}`);
+  if (buyerConfig.desiredOutcome) {
+    console.log(`Desired outcome: ${buyerConfig.desiredOutcome}`);
+  }
   console.log(`\nWaiting for sellers to connect...`);
   console.log(`(Buyer will send offers when sellers notify they're ready)\n`);
 });

@@ -1,22 +1,32 @@
-import { loadContext, saveContext, AgentContext } from '@dmm/agents-shared';
+import { loadSellerConfig, SellerConfig } from '@dmm/agents-shared';
 
-export interface UserContext extends AgentContext {
-  instructions: string; // Plain language instructions from user
-  // e.g., "Always vote no for airdrops"
-  // e.g., "I'm generally in favor of DeFi improvements but against token emissions"
-  // e.g., "Vote yes on anything that increases liquidity, vote no on governance changes"
+export interface UserContext {
+  instructions: string;
+  minPrice?: string;
 }
 
-const USER_CONTEXT_FILE = 'user-context.txt';
-const DEFAULT_USER_INSTRUCTIONS = 'Always vote no for airdrops';
-
+/**
+ * Load user context from config file
+ */
 export async function loadUserContext(): Promise<UserContext> {
-  // For MVP: simple text file with user's plain language instructions
-  // Future: database, encrypted storage, etc.
-  return loadContext(USER_CONTEXT_FILE, DEFAULT_USER_INSTRUCTIONS) as Promise<UserContext>;
+  const config = loadSellerConfig();
+  
+  // Build instructions with minimum price if specified
+  let instructions = config.instructions;
+  if (config.minPrice) {
+    instructions = `${instructions} Minimum ${config.minPrice} HBAR per vote.`;
+  }
+  
+  return {
+    instructions,
+    minPrice: config.minPrice,
+  };
 }
 
-export async function saveUserContext(context: UserContext): Promise<void> {
-  return saveContext(USER_CONTEXT_FILE, context);
+/**
+ * Get seller config (for accessing port, name, buyerUrls, etc.)
+ */
+export function getSellerConfig(configPath?: string): SellerConfig {
+  return loadSellerConfig(configPath);
 }
 

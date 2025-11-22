@@ -24,6 +24,28 @@ export interface VoteOfferResponse {
   rejectionReason?: string; // If rejected, why
 }
 
+// Message from seller to other buyers asking if they want to beat an offer
+export interface CompetingOfferRequest {
+  type: 'competing-offer-request';
+  auctionId: string; // Unique ID for this auction/negotiation
+  proposal: ProposalInfo;
+  currentOffer: {
+    buyerId: string;
+    desiredOutcome: string;
+    offeredAmount: string;
+  };
+  deadline: string; // ISO timestamp - when to respond by
+}
+
+// Response from buyer indicating if they want to beat the offer
+export interface CompetingOfferResponse {
+  type: 'competing-offer-response';
+  auctionId: string; // Must match the auctionId from the request
+  wantsToBeat: boolean;
+  newOffer?: VoteOffer; // If wantsToBeat is true, include the new offer
+  reason?: string;
+}
+
 // User context - plain language instructions for the seller agent
 export interface UserContext {
   instructions: string; // Plain language instructions about what votes are allowed/not allowed

@@ -1,6 +1,6 @@
 import { A2AClient } from '@a2a-js/sdk/client';
 import { Message, Task } from '@a2a-js/sdk';
-import { VoteOffer, VoteOfferResponse } from '@dmm/agents-shared';
+import { VoteOffer, VoteOfferResponse, CompetingOfferRequest, CompetingOfferResponse } from '@dmm/agents-shared';
 import { UserContext } from './preferences.js';
 import { evaluateOffer } from './negotiation.js';
 
@@ -14,6 +14,15 @@ export interface NegotiationState {
 
 // Track active negotiations
 const activeNegotiations = new Map<string, NegotiationState>();
+
+// Track competing offers for auction mechanism
+interface CompetingOffer {
+  buyerId: string;
+  offer: VoteOffer;
+  receivedAt: Date;
+}
+
+const competingOffers = new Map<string, CompetingOffer[]>(); // taskId -> competing offers
 
 /**
  * Parse a VoteOffer from a message
@@ -36,6 +45,115 @@ function parseVoteOffer(message: Message): VoteOffer | null {
 }
 
 /**
+ * Notify other buyers about an offer to see if they want to beat it
+ */
+async function requestCompetingOffers(
+  originalBuyerId: string,
+  originalOffer: VoteOffer,
+  taskId: string,
+  allBuyerClients: Map<string, A2AClient>,
+  timeoutMs: number = 10000 // 10 seconds
+): Promise<CompetingOffer[]> {
+  const competing: CompetingOffer[] = [];
+  const otherBuyers = Array.from(allBuyerClients.entries()).filter(([id]) => id !== originalBuyerId);
+  
+  if (otherBuyers.length === 0) {
+    console.log(`  No other buyers connected, skipping auction`);
+    return competing;
+  }
+  
+  console.log(`  Notifying ${otherBuyers.length} other buyer(s) about this offer...`);
+  
+  const deadline = new Date(Date.now() + timeoutMs).toISOString();
+  const request: CompetingOfferRequest = {
+    type: 'competing-offer-request',
+    auctionId: taskId, // Use taskId as auction identifier
+    proposal: originalOffer.proposal,
+    currentOffer: {
+      buyerId: originalBuyerId,
+      desiredOutcome: originalOffer.desiredOutcome,
+      offeredAmount: originalOffer.offeredAmount,
+    },
+    deadline,
+  };
+  
+  // Send request to all other buyers
+  const responsePromises = otherBuyers.map(async ([buyerId, client]) => {
+    try {
+      const requestMessage: Message = {
+        messageId: `competing-request-${Date.now()}-${buyerId}`,
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: JSON.stringify(request),
+          },
+        ],
+        kind: 'message',
+      };
+      
+      await client.sendMessage({ message: requestMessage });
+      console.log(`    → Sent competing offer request to ${buyerId}`);
+    } catch (error) {
+      console.error(`    ✗ Failed to send competing offer request to ${buyerId}:`, error);
+    }
+  });
+  
+  await Promise.all(responsePromises);
+  
+  // Wait for responses (with timeout)
+  console.log(`  Waiting ${timeoutMs / 1000}s for competing offers...`);
+  await new Promise(resolve => setTimeout(resolve, timeoutMs));
+  
+  // Collect any responses that came in
+  const receivedCompeting = competingOffers.get(taskId) || [];
+  competingOffers.delete(taskId); // Clean up
+  
+  if (receivedCompeting.length > 0) {
+    console.log(`  Received ${receivedCompeting.length} competing offer(s)`);
+  } else {
+    console.log(`  No competing offers received`);
+  }
+  
+  return receivedCompeting;
+}
+
+/**
+ * Handle a competing offer response from a buyer
+ */
+export async function handleCompetingOfferResponse(
+  buyerId: string,
+  message: Message
+): Promise<void> {
+  try {
+    const textPart = message.parts.find((p: any) => p.kind === 'text');
+    if (!textPart || !('text' in textPart)) {
+      return;
+    }
+    
+    const response = JSON.parse(textPart.text) as CompetingOfferResponse;
+    
+    if (response.type === 'competing-offer-response' && response.wantsToBeat && response.newOffer) {
+      const auctionId = response.auctionId;
+      console.log(`[${buyerId}] Received competing offer for auction ${auctionId}: ${response.newOffer.offeredAmount} HBAR`);
+      
+      // Store the competing offer using the auctionId from the response
+      if (!competingOffers.has(auctionId)) {
+        competingOffers.set(auctionId, []);
+      }
+      
+      competingOffers.get(auctionId)!.push({
+        buyerId,
+        offer: response.newOffer,
+        receivedAt: new Date(),
+      });
+    }
+  } catch (error) {
+    console.error(`Error handling competing offer response from ${buyerId}:`, error);
+  }
+}
+
+/**
  * Handle an incoming message from a buyer
  */
 export async function handleIncomingMessage(
@@ -43,7 +161,8 @@ export async function handleIncomingMessage(
   client: A2AClient,
   message: Message,
   task: Task | undefined,
-  userContext: UserContext
+  userContext: UserContext,
+  allBuyerClients?: Map<string, A2AClient>
 ): Promise<void> {
   const offer = parseVoteOffer(message);
   
@@ -60,6 +179,7 @@ export async function handleIncomingMessage(
   // Check if this is a continuation of an existing negotiation
   const existingNegotiation = activeNegotiations.get(taskId);
   let negotiationState: NegotiationState;
+  let isNewNegotiation = false;
 
   if (existingNegotiation) {
     // This is a counter-offer from the buyer
@@ -70,7 +190,8 @@ export async function handleIncomingMessage(
     };
     console.log(`  Round ${negotiationState.rounds} of negotiation`);
   } else {
-    // New negotiation
+    // New negotiation - check for competing offers
+    isNewNegotiation = true;
     negotiationState = {
       offer,
       rounds: 1,
@@ -78,6 +199,100 @@ export async function handleIncomingMessage(
       taskId,
     };
     console.log(`  Starting new negotiation (Round 1)`);
+    
+    // Request competing offers from other buyers
+    if (allBuyerClients && allBuyerClients.size > 1) {
+      const competing = await requestCompetingOffers(
+        buyerId,
+        offer,
+        taskId,
+        allBuyerClients
+      );
+      
+      // If we have competing offers, compare them
+      if (competing.length > 0) {
+        // Find the best offer (highest price)
+        const allOffers = [
+          { buyerId, offer, isOriginal: true },
+          ...competing.map(c => ({ buyerId: c.buyerId, offer: c.offer, isOriginal: false }))
+        ];
+        
+        // Sort by offered amount (descending)
+        allOffers.sort((a, b) => {
+          const amountA = parseFloat(a.offer.offeredAmount);
+          const amountB = parseFloat(b.offer.offeredAmount);
+          return amountB - amountA;
+        });
+        
+        const bestOffer = allOffers[0];
+        
+        if (!bestOffer.isOriginal) {
+          console.log(`  ⚠ Best offer is from ${bestOffer.buyerId} (${bestOffer.offer.offeredAmount} HBAR)`);
+          console.log(`  Original offer from ${buyerId} (${offer.offeredAmount} HBAR) was beaten`);
+          
+          // Update negotiation state with best offer
+          negotiationState.offer = bestOffer.offer;
+          negotiationState.buyerId = bestOffer.buyerId;
+          
+          // Notify original buyer that their offer was beaten
+          try {
+            const beatenMessage: Message = {
+              messageId: `beaten-${Date.now()}`,
+              role: 'agent',
+              parts: [
+                {
+                  kind: 'text',
+                  text: JSON.stringify({
+                    type: 'offer-beaten',
+                    reason: `Another buyer offered ${bestOffer.offer.offeredAmount} HBAR (you offered ${offer.offeredAmount} HBAR)`,
+                    winningOffer: bestOffer.offer.offeredAmount,
+                  }),
+                },
+              ],
+              kind: 'message',
+            };
+            await client.sendMessage({ message: beatenMessage });
+          } catch (error) {
+            console.error(`  ✗ Failed to notify original buyer:`, error);
+          }
+          
+          // Update client reference to the winning buyer
+          const winningClient = allBuyerClients.get(bestOffer.buyerId);
+          if (winningClient) {
+            client = winningClient;
+            buyerId = bestOffer.buyerId;
+          }
+        } else {
+          console.log(`  ✓ Original offer from ${buyerId} is still the best`);
+          
+          // Notify competing buyers that they didn't win
+          for (const competingOffer of competing) {
+            try {
+              const losingClient = allBuyerClients.get(competingOffer.buyerId);
+              if (losingClient) {
+                const losingMessage: Message = {
+                  messageId: `losing-${Date.now()}`,
+                  role: 'agent',
+                  parts: [
+                    {
+                      kind: 'text',
+                      text: JSON.stringify({
+                        type: 'offer-not-selected',
+                        reason: `Another buyer's offer was selected`,
+                      }),
+                    },
+                  ],
+                  kind: 'message',
+                };
+                await losingClient.sendMessage({ message: losingMessage });
+              }
+            } catch (error) {
+              console.error(`  ✗ Failed to notify losing buyer:`, error);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Evaluate the offer

@@ -28,7 +28,8 @@ export interface BuyerEvaluation {
 
 export async function createOfferWithLLM(
   proposal: ProposalInfo,
-  buyerContext: string
+  buyerContext: string,
+  desiredOutcome?: string
 ): Promise<BuyerEvaluation> {
   const prompt = ChatPromptTemplate.fromMessages([
     [
@@ -47,6 +48,7 @@ Always respond with valid JSON in this exact format:
       'human',
       `Buyer's goals and context:
 {buyerContext}
+{desiredOutcomeNote}
 
 Proposal details:
 Title: {title}
@@ -60,8 +62,13 @@ Based on the buyer's context, should they pursue purchasing votes for this propo
   const chain = prompt.pipe(llm).pipe(outputParser);
 
   try {
+    const desiredOutcomeNote = desiredOutcome 
+      ? `\nIMPORTANT: The buyer wants the outcome to be "${desiredOutcome}". Make sure to set desiredOutcome to "${desiredOutcome}".`
+      : '';
+    
     const result = await chain.invoke({
       buyerContext,
+      desiredOutcomeNote,
       title: proposal.title,
       description: proposal.description,
       options: proposal.options.join(', '),

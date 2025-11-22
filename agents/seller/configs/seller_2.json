@@ -1,0 +1,11 @@
+{
+  "name": "Seller 2 - Price Conscious",
+  "port": 4003,
+  "instructions": "Minimum 15 HBAR per vote. Willing to sell for any proposal if price is right. Prefer liquidity proposals.",
+  "minPrice": "15",
+  "buyerUrls": [
+    "http://localhost:4000",
+    "http://localhost:4002"
+  ]
+}
+

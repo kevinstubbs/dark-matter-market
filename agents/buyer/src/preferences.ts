@@ -1,21 +1,37 @@
-import { loadContext, saveContext, AgentContext } from '@dmm/agents-shared';
+import { loadBuyerConfig, BuyerConfig } from '@dmm/agents-shared';
 
-export interface BuyerContext extends AgentContext {
-  instructions: string; // Plain language instructions from buyer
-  // e.g., "I want votes for proposals that increase liquidity"
-  // e.g., "I'm against any proposal that reduces token emissions"
-  // e.g., "Support DeFi improvements, oppose governance changes"
-  // e.g., "Maximum 20 HBAR per vote, need 100 votes"
+export interface BuyerContext {
+  instructions: string;
+  desiredOutcome?: string;
+  maxPrice?: string;
 }
 
-const BUYER_CONTEXT_FILE = 'buyer-context.txt';
-const DEFAULT_BUYER_INSTRUCTIONS = 'I want votes for proposals that benefit the ecosystem';
-
+/**
+ * Load buyer context from config file
+ */
 export async function loadBuyerContext(): Promise<BuyerContext> {
-  return loadContext(BUYER_CONTEXT_FILE, DEFAULT_BUYER_INSTRUCTIONS) as Promise<BuyerContext>;
+  const config = loadBuyerConfig();
+  
+  // Build instructions with desired outcome if specified
+  let instructions = config.instructions;
+  if (config.desiredOutcome) {
+    instructions = `${instructions} I want votes for proposals where the outcome is "${config.desiredOutcome}".`;
+  }
+  if (config.maxPrice) {
+    instructions = `${instructions} Maximum ${config.maxPrice} HBAR per vote.`;
+  }
+  
+  return {
+    instructions,
+    desiredOutcome: config.desiredOutcome,
+    maxPrice: config.maxPrice,
+  };
 }
 
-export async function saveBuyerContext(context: BuyerContext): Promise<void> {
-  return saveContext(BUYER_CONTEXT_FILE, context);
+/**
+ * Get buyer config (for accessing port, name, etc.)
+ */
+export function getBuyerConfig(): BuyerConfig {
+  return loadBuyerConfig();
 }
 
