@@ -31,9 +31,17 @@ export default async function Home() {
               Dark Matter Markets
             </h1>
           </div>
-          <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+          <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400 mb-4">
             Alien incentives. Human rewards.
           </p>
+          <div>
+            <a
+              href="/agents"
+              className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              View Agent Dashboard →
+            </a>
+          </div>
         </div>
 
         {error && (

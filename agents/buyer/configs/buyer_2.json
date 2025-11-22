@@ -1,4 +1,5 @@
 {
+  "id": "buyer-2",
   "name": "Buyer 2 - No Supporter",
   "port": 4002,
   "instructions": "I want votes against proposals that increase token emissions or reduce rewards. I oppose proposals that dilute token value.",

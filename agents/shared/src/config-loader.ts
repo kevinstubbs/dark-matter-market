@@ -19,8 +19,8 @@ export function loadBuyerConfig(configPath?: string): BuyerConfig {
     const config = JSON.parse(content) as BuyerConfig;
     
     // Validate required fields
-    if (!config.name || !config.port || !config.instructions) {
-      throw new Error('Config must include: name, port, instructions');
+    if (!config.id || !config.name || !config.port || !config.instructions) {
+      throw new Error('Config must include: id, name, port, instructions');
     }
     
     return config;
@@ -50,8 +50,8 @@ export function loadSellerConfig(configPath?: string): SellerConfig {
     const config = JSON.parse(content) as SellerConfig;
     
     // Validate required fields
-    if (!config.name || !config.port || !config.instructions) {
-      throw new Error('Config must include: name, port, instructions');
+    if (!config.id || !config.name || !config.port || !config.instructions) {
+      throw new Error('Config must include: id, name, port, instructions');
     }
     
     return config;

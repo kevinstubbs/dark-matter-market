@@ -8,6 +8,7 @@ import { RequestContext, ExecutionEventBus, AgentExecutor } from '@a2a-js/sdk/se
 import { config } from 'dotenv';
 import { loadUserContext, UserContext, getSellerConfig } from './preferences.js';
 import { handleIncomingMessage, handleCompetingOfferResponse } from './message-handler.js';
+import { AgentLogger } from '@dmm/agents-shared';
 
 // Load environment variables
 config();
@@ -18,9 +19,10 @@ const buyerClients: Map<string, A2AClient> = new Map();
 // Store user context globally for use in executor
 let globalUserContext: UserContext | null = null;
 
+// Store logger globally for use in executor and message handler
+let globalLogger: AgentLogger | null = null;
+
 async function main() {
-  console.log('Starting Seller Agent...\n');
-  
   // Load seller config from JSON file
   // Config file can be specified via:
   // 1. Command line arg: node dist/index.js configs/seller_1.json
@@ -38,11 +40,18 @@ async function main() {
     process.exit(1);
   }
   
+  // Create logger (website URL from env or default to localhost:3000)
+  const websiteUrl = process.env.WEBSITE_URL || 'http://localhost:3000';
+  globalLogger = new AgentLogger(sellerConfig.id, websiteUrl);
+  
+  // Clear previous messages on startup
+  await globalLogger.clearMessages();
+  await globalLogger.log(`Starting Seller Agent "${sellerConfig.name}"...`, 'agent-started');
+  
   // Load user's plain language instructions
   globalUserContext = await loadUserContext(configPath);
-  console.log(`Seller Agent "${sellerConfig.name}"`);
-  console.log('Instructions:', globalUserContext.instructions);
-  console.log('');
+  await globalLogger.log(`Seller Agent "${sellerConfig.name}"`, 'agent-ready');
+  await globalLogger.log(`Instructions: ${globalUserContext.instructions}`, 'info');
   
   // Set up A2A server to receive messages from buyers
   const PORT = sellerConfig.port;
@@ -74,9 +83,9 @@ async function main() {
   a2aApp.setupRoutes(app);
   
   // Start server
-  const server = app.listen(PORT, () => {
-    console.log(`✓ Seller agent server running on http://localhost:${PORT}`);
-    console.log(`  Agent card: http://localhost:${PORT}/.well-known/agent-card.json\n`);
+  const server = app.listen(PORT, async () => {
+    await globalLogger!.log(`Seller agent server running on http://localhost:${PORT}`, 'agent-ready');
+    await globalLogger!.log(`Agent card: http://localhost:${PORT}/.well-known/agent-card.json`, 'info');
   });
   
   // Connect to buyer agents (for sending responses)
@@ -92,10 +101,10 @@ async function main() {
     const buyerId = url;
     
     try {
-      console.log(`Connecting to buyer agent at ${url}...`);
+      await globalLogger!.log(`Connecting to buyer agent at ${url}...`, 'info');
       const client = await A2AClient.fromCardUrl(`${url}/.well-known/agent-card.json`);
       buyerClients.set(buyerId, client);
-      console.log(`✓ Connected to buyer agent at ${url}`);
+      await globalLogger!.log(`Connected to buyer agent at ${url}`, 'connection-established');
       
       // Send a "ready" message to trigger the buyer to send an offer
       try {
@@ -117,22 +126,22 @@ async function main() {
         };
         
         await client.sendMessage({ message: readyMessage });
-        console.log(`  → Notified buyer that seller is ready`);
+        await globalLogger!.log(`Notified buyer that seller is ready`, 'seller-ready');
       } catch (error) {
-        console.error(`  ⚠ Failed to send ready message:`, error);
+        await globalLogger!.error(`Failed to send ready message: ${error instanceof Error ? error.message : String(error)}`);
         // Continue anyway - buyer can still send offers
       }
     } catch (error) {
       if (retryCount < MAX_RETRIES) {
-        console.error(`✗ Buyer counterpart didn't answer at ${url} (attempt ${retryCount + 1})`);
-        console.log(`  Retrying in ${RETRY_INTERVAL / 1000} seconds...`);
+        await globalLogger!.log(`Buyer counterpart didn't answer at ${url} (attempt ${retryCount + 1})`, 'connection-failed');
+        await globalLogger!.log(`Retrying in ${RETRY_INTERVAL / 1000} seconds...`, 'info');
         
         // Retry after interval
         await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL));
         return connectToBuyer(url, retryCount + 1);
       } else {
-        console.error(`✗ Buyer counterpart didn't answer at ${url} after ${retryCount} attempts`);
-        console.error(`  Buyer can still send messages to seller server at http://localhost:${PORT}`);
+        await globalLogger!.error(`Buyer counterpart didn't answer at ${url} after ${retryCount} attempts`);
+        await globalLogger!.log(`Buyer can still send messages to seller server at http://localhost:${PORT}`, 'info');
       }
     }
   }
@@ -141,15 +150,15 @@ async function main() {
   const connectionPromises = buyerUrls.map((url: string) => connectToBuyer(url));
   
   // Don't wait for connections - let them retry in background
-  Promise.all(connectionPromises).catch((error) => {
-    console.error('Error in buyer connection attempts:', error);
+  Promise.all(connectionPromises).catch(async (error) => {
+    await globalLogger!.error(`Error in buyer connection attempts: ${error instanceof Error ? error.message : String(error)}`);
   });
   
-  console.log(`\n✓ Seller agent "${sellerConfig.name}" ready!`);
-  console.log(`  Listening for vote purchase offers on port ${PORT}`);
-  console.log(`  Attempting to connect to ${buyerUrls.length} buyer agent(s)...`);
-  console.log(`  (Will retry every ${RETRY_INTERVAL / 1000} seconds if connection fails)\n`);
-  console.log('Waiting for offers... (Press Ctrl+C to stop)\n');
+  await globalLogger!.log(`Seller agent "${sellerConfig.name}" ready!`, 'agent-ready');
+  await globalLogger!.log(`Listening for vote purchase offers on port ${PORT}`, 'info');
+  await globalLogger!.log(`Attempting to connect to ${buyerUrls.length} buyer agent(s)...`, 'info');
+  await globalLogger!.log(`(Will retry every ${RETRY_INTERVAL / 1000} seconds if connection fails)`, 'info');
+  await globalLogger!.log('Waiting for offers... (Press Ctrl+C to stop)', 'info');
   
   // Set up signal handlers for graceful shutdown
   process.on('SIGINT', () => {
@@ -180,7 +189,7 @@ class SellerExecutor implements AgentExecutor {
     const { taskId, contextId, userMessage, task } = requestContext;
     
     if (!globalUserContext) {
-      console.error('User context not loaded');
+      if (globalLogger) await globalLogger.error('User context not loaded');
       return;
     }
     
@@ -222,12 +231,12 @@ class SellerExecutor implements AgentExecutor {
     const client = buyerClients.get(buyerId);
     
     if (!client) {
-      console.error(`No client found for buyer ${buyerId}`);
+      if (globalLogger) await globalLogger.error(`No client found for buyer ${buyerId}`);
       return;
     }
     
     // Handle the incoming message (pass all buyer clients for auction mechanism)
-    await handleIncomingMessage(buyerId, client, userMessage, task, globalUserContext, buyerClients);
+    await handleIncomingMessage(buyerId, client, userMessage, task, globalUserContext, buyerClients, globalLogger!);
     
     // Mark task as completed
     eventBus.publish({

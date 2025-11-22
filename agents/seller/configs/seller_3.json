@@ -1,4 +1,5 @@
 {
+  "id": "seller-3",
   "name": "Seller 3 - DeFi Supporter",
   "port": 4004,
   "instructions": "Vote yes on liquidity and DeFi proposals. Vote no on governance changes. Minimum 12 HBAR per vote.",

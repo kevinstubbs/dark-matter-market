@@ -4,15 +4,18 @@ import {
   ExecutionEventBus,
 } from '@a2a-js/sdk/server';
 import { A2AClient } from '@a2a-js/sdk/client';
-import { VoteOffer, VoteOfferResponse, ProposalInfo, CompetingOfferRequest, CompetingOfferResponse } from '@dmm/agents-shared';
+import { VoteOffer, VoteOfferResponse, ProposalInfo, CompetingOfferRequest, CompetingOfferResponse, AgentLogger } from '@dmm/agents-shared';
 import { loadBuyerContext } from './preferences.js';
 import { createOfferWithLLM } from './llm-evaluator.js';
 
 export class BuyerExecutor implements AgentExecutor {
   private configPath?: string;
+  private logger: AgentLogger;
 
-  constructor(configPath?: string) {
+  constructor(configPath?: string, logger?: AgentLogger) {
     this.configPath = configPath;
+    // Create a default logger if none provided (for backward compatibility)
+    this.logger = logger || new AgentLogger('buyer-unknown');
   }
 
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
@@ -35,10 +38,10 @@ export class BuyerExecutor implements AgentExecutor {
       // Handle competing offer request
       if (messageData.type === 'competing-offer-request') {
         const request = messageData as CompetingOfferRequest;
-        console.log(`\n[Buyer] Received competing offer request`);
-        console.log(`  Current offer: ${request.currentOffer.offeredAmount} HBAR from ${request.currentOffer.buyerId}`);
-        console.log(`  Proposal: "${request.proposal.title}"`);
-        console.log(`  Deadline: ${request.deadline}`);
+        await this.logger.log(`Received competing offer request`, 'competing-offer-request');
+        await this.logger.log(`Current offer: ${request.currentOffer.offeredAmount} HBAR from ${request.currentOffer.buyerId}`, 'info');
+        await this.logger.log(`Proposal: "${request.proposal.title}"`, 'info');
+        await this.logger.log(`Deadline: ${request.deadline}`, 'info');
         
         // Check if we want to beat this offer
         const currentAmount = parseFloat(request.currentOffer.offeredAmount);
@@ -52,7 +55,7 @@ export class BuyerExecutor implements AgentExecutor {
         );
         
         if (!evaluation.shouldPursue) {
-          console.log(`  Decision: Not interested in this proposal`);
+          await this.logger.log(`Decision: Not interested in this proposal`, 'negotiation-failed');
           // Send response that we don't want to beat
           eventBus.publish({
             kind: 'message',
@@ -76,7 +79,7 @@ export class BuyerExecutor implements AgentExecutor {
           const competitiveAmount = Math.max(suggestedAmount, currentAmount + 1); // At least 1 HBAR more
           
           if (competitiveAmount > maxPrice) {
-            console.log(`  Decision: Cannot beat offer (would exceed max price of ${maxPrice} HBAR)`);
+            await this.logger.log(`Decision: Cannot beat offer (would exceed max price of ${maxPrice} HBAR)`, 'negotiation-failed');
             eventBus.publish({
               kind: 'message',
               messageId: `competing-response-${taskId}`,
@@ -94,7 +97,7 @@ export class BuyerExecutor implements AgentExecutor {
               ],
             } as any);
           } else {
-            console.log(`  Decision: Will beat with ${competitiveAmount} HBAR`);
+            await this.logger.log(`Decision: Will beat with ${competitiveAmount} HBAR`, 'competing-offer-response');
             
             const competingOffer: VoteOffer = {
               proposal: request.proposal,
@@ -137,8 +140,8 @@ export class BuyerExecutor implements AgentExecutor {
       
       if (messageData.type === 'seller-ready') {
         // Seller is ready - create a test proposal and send an offer
-        console.log(`\n[Buyer] Received seller-ready message from ${messageData.sellerUrl}`);
-        console.log(`  Creating vote purchase offer...`);
+        await this.logger.log(`Received seller-ready message from ${messageData.sellerUrl}`, 'seller-ready');
+        await this.logger.log(`Creating vote purchase offer...`, 'info');
         
         proposal = {
           dmmTopicId: '0.0.123456',
@@ -200,14 +203,14 @@ export class BuyerExecutor implements AgentExecutor {
       quantity: evaluation.quantity || 1, // Number of votes needed
     };
     
-    console.log(`  Offer created: ${offer.offeredAmount} HBAR for "${offer.proposal.title}"`);
-    console.log(`  Desired outcome: ${offer.desiredOutcome}`);
+    await this.logger.offerCreated(`Offer created: ${offer.offeredAmount} HBAR for "${offer.proposal.title}"`);
+    await this.logger.log(`Desired outcome: ${offer.desiredOutcome}`, 'info');
     
     // Send the offer to the seller's server
     const sellerUrl = (requestContext as any).sellerUrl;
     if (sellerUrl) {
       try {
-        console.log(`  Sending offer to seller at ${sellerUrl}...`);
+        await this.logger.log(`Sending offer to seller at ${sellerUrl}...`, 'info');
         const sellerClient = await A2AClient.fromCardUrl(`${sellerUrl}/.well-known/agent-card.json`);
         const { v4: uuidv4 } = await import('uuid');
         
@@ -225,9 +228,9 @@ export class BuyerExecutor implements AgentExecutor {
           },
         });
         
-        console.log(`  ✓ Offer sent to seller successfully`);
+        await this.logger.offerSent(`Offer sent to seller successfully: ${offer.offeredAmount} HBAR for "${offer.proposal.title}"`);
       } catch (error) {
-        console.error(`  ✗ Failed to send offer to seller:`, error);
+        await this.logger.error(`Failed to send offer to seller: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
     

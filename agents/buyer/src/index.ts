@@ -6,6 +6,7 @@ import { A2AExpressApp } from '@a2a-js/sdk/server/express';
 import { config } from 'dotenv';
 import { BuyerExecutor } from './executor.js';
 import { getBuyerConfig } from './preferences.js';
+import { AgentLogger } from '@dmm/agents-shared';
 
 // Load environment variables (for ANTHROPIC_API_KEY, etc.)
 config();
@@ -50,6 +51,14 @@ try {
 // Use port from command line if provided, otherwise from config, otherwise default to 4000
 const PORT = portOverride ?? buyerConfig.port ?? 4000;
 
+// Create logger (website URL from env or default to localhost:3000)
+const websiteUrl = process.env.WEBSITE_URL || 'http://localhost:3000';
+const logger = new AgentLogger(buyerConfig.id, websiteUrl);
+
+// Clear previous messages on startup
+await logger.clearMessages();
+await logger.log(`Buyer Agent "${buyerConfig.name}" starting...`, 'agent-started');
+
 // Create agent card
 const agentCard: AgentCard = {
   name: buyerConfig.name,
@@ -67,8 +76,8 @@ const agentCard: AgentCard = {
   },
 };
 
-// Create executor (pass config path so it uses the same config)
-const executor = new BuyerExecutor(configPath);
+// Create executor (pass config path and logger so it uses the same config and logger)
+const executor = new BuyerExecutor(configPath, logger);
 const taskStore = new InMemoryTaskStore();
 const requestHandler = new DefaultRequestHandler(agentCard, taskStore, executor);
 
@@ -80,14 +89,14 @@ const a2aApp = new A2AExpressApp(requestHandler);
 a2aApp.setupRoutes(app);
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Buyer Agent "${buyerConfig.name}" running on http://localhost:${PORT}`);
-  console.log(`Agent card available at http://localhost:${PORT}/.well-known/agent-card.json`);
-  console.log(`Instructions: ${buyerConfig.instructions}`);
+app.listen(PORT, async () => {
+  await logger.log(`Buyer Agent "${buyerConfig.name}" running on http://localhost:${PORT}`, 'agent-ready');
+  await logger.log(`Agent card available at http://localhost:${PORT}/.well-known/agent-card.json`, 'info');
+  await logger.log(`Instructions: ${buyerConfig.instructions}`, 'info');
   if (buyerConfig.desiredOutcome) {
-    console.log(`Desired outcome: ${buyerConfig.desiredOutcome}`);
+    await logger.log(`Desired outcome: ${buyerConfig.desiredOutcome}`, 'info');
   }
-  console.log(`\nWaiting for sellers to connect...`);
-  console.log(`(Buyer will send offers when sellers notify they're ready)\n`);
+  await logger.log(`Waiting for sellers to connect...`, 'info');
+  await logger.log(`(Buyer will send offers when sellers notify they're ready)`, 'info');
 });
 

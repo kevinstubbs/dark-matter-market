@@ -1,4 +1,5 @@
 export interface BuyerConfig {
+  id: string; // Unique agent ID for demo logging
   name: string;
   port: number;
   instructions: string; // Plain language instructions
@@ -7,6 +8,7 @@ export interface BuyerConfig {
 }
 
 export interface SellerConfig {
+  id: string; // Unique agent ID for demo logging
   name: string;
   port: number;
   instructions: string; // Plain language instructions

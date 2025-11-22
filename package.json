@@ -22,10 +22,14 @@
     "agents:seller:2": "cd agents/seller && node dist/index.js configs/seller_2.json",
     "agents:seller:3": "cd agents/seller && node dist/index.js configs/seller_3.json",
     "agents:seller:4": "cd agents/seller && node dist/index.js configs/seller_4.json",
-    "agents:seller:5": "cd agents/seller && node dist/index.js configs/seller_5.json"
+    "agents:seller:5": "cd agents/seller && node dist/index.js configs/seller_5.json",
+    "agents:start-all": "tsx scripts/start-all-agents.ts"
   },
   "devDependencies": {
-    "turbo": "^2.0.0"
+    "turbo": "^2.0.0",
+    "tsx": "^4.7.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=20.0.0",

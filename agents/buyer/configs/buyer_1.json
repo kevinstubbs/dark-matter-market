@@ -1,4 +1,5 @@
 {
+  "id": "buyer-1",
   "name": "Buyer 1 - Yes Supporter",
   "port": 4000,
   "instructions": "I want votes for proposals that increase liquidity and improve the DeFi ecosystem. I support proposals that benefit token holders.",

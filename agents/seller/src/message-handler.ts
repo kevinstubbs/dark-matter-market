@@ -1,6 +1,6 @@
 import { A2AClient } from '@a2a-js/sdk/client';
 import { Message, Task } from '@a2a-js/sdk';
-import { VoteOffer, VoteOfferResponse, CompetingOfferRequest, CompetingOfferResponse } from '@dmm/agents-shared';
+import { VoteOffer, VoteOfferResponse, CompetingOfferRequest, CompetingOfferResponse, AgentLogger } from '@dmm/agents-shared';
 import { UserContext } from './preferences.js';
 import { evaluateOffer } from './negotiation.js';
 
@@ -52,17 +52,18 @@ async function requestCompetingOffers(
   originalOffer: VoteOffer,
   taskId: string,
   allBuyerClients: Map<string, A2AClient>,
-  timeoutMs: number = 10000 // 10 seconds
+  timeoutMs: number = 10000, // 10 seconds
+  logger?: AgentLogger
 ): Promise<CompetingOffer[]> {
   const competing: CompetingOffer[] = [];
   const otherBuyers = Array.from(allBuyerClients.entries()).filter(([id]) => id !== originalBuyerId);
   
   if (otherBuyers.length === 0) {
-    console.log(`  No other buyers connected, skipping auction`);
+    if (logger) await logger.log(`No other buyers connected, skipping auction`, 'info');
     return competing;
   }
   
-  console.log(`  Notifying ${otherBuyers.length} other buyer(s) about this offer...`);
+  if (logger) await logger.log(`Notifying ${otherBuyers.length} other buyer(s) about this offer...`, 'competing-offer-request');
   
   const deadline = new Date(Date.now() + timeoutMs).toISOString();
   const request: CompetingOfferRequest = {
@@ -93,16 +94,16 @@ async function requestCompetingOffers(
       };
       
       await client.sendMessage({ message: requestMessage });
-      console.log(`    → Sent competing offer request to ${buyerId}`);
+      if (logger) await logger.log(`Sent competing offer request to ${buyerId}`, 'competing-offer-request');
     } catch (error) {
-      console.error(`    ✗ Failed to send competing offer request to ${buyerId}:`, error);
+      if (logger) await logger.error(`Failed to send competing offer request to ${buyerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
   
   await Promise.all(responsePromises);
   
   // Wait for responses (with timeout)
-  console.log(`  Waiting ${timeoutMs / 1000}s for competing offers...`);
+  if (logger) await logger.log(`Waiting ${timeoutMs / 1000}s for competing offers...`, 'info');
   await new Promise(resolve => setTimeout(resolve, timeoutMs));
   
   // Collect any responses that came in
@@ -110,9 +111,9 @@ async function requestCompetingOffers(
   competingOffers.delete(taskId); // Clean up
   
   if (receivedCompeting.length > 0) {
-    console.log(`  Received ${receivedCompeting.length} competing offer(s)`);
+    if (logger) await logger.log(`Received ${receivedCompeting.length} competing offer(s)`, 'competing-offer-response');
   } else {
-    console.log(`  No competing offers received`);
+    if (logger) await logger.log(`No competing offers received`, 'info');
   }
   
   return receivedCompeting;
@@ -162,19 +163,20 @@ export async function handleIncomingMessage(
   message: Message,
   task: Task | undefined,
   userContext: UserContext,
-  allBuyerClients?: Map<string, A2AClient>
+  allBuyerClients?: Map<string, A2AClient>,
+  logger?: AgentLogger
 ): Promise<void> {
   const offer = parseVoteOffer(message);
   
   if (!offer) {
-    console.log(`[${buyerId}] Received non-offer message, ignoring`);
+    if (logger) await logger.log(`[${buyerId}] Received non-offer message, ignoring`, 'message-received');
     return;
   }
 
   const taskId = task?.id || `task-${Date.now()}`;
-  console.log(`\n[${buyerId}] Received vote offer for proposal: "${offer.proposal.title}"`);
-  console.log(`  Desired outcome: ${offer.desiredOutcome}`);
-  console.log(`  Offered amount: ${offer.offeredAmount} HBAR per vote`);
+  if (logger) await logger.offerReceived(`[${buyerId}] Received vote offer for proposal: "${offer.proposal.title}"`);
+  if (logger) await logger.log(`Desired outcome: ${offer.desiredOutcome}`, 'info');
+  if (logger) await logger.log(`Offered amount: ${offer.offeredAmount} HBAR per vote`, 'info');
 
   // Check if this is a continuation of an existing negotiation
   const existingNegotiation = activeNegotiations.get(taskId);
@@ -188,7 +190,7 @@ export async function handleIncomingMessage(
       offer,
       rounds: existingNegotiation.rounds + 1,
     };
-    console.log(`  Round ${negotiationState.rounds} of negotiation`);
+    if (logger) await logger.log(`Round ${negotiationState.rounds} of negotiation`, 'negotiation-started');
   } else {
     // New negotiation - check for competing offers
     isNewNegotiation = true;
@@ -198,7 +200,7 @@ export async function handleIncomingMessage(
       buyerId,
       taskId,
     };
-    console.log(`  Starting new negotiation (Round 1)`);
+    if (logger) await logger.negotiationStarted(`Starting new negotiation (Round 1)`);
     
     // Request competing offers from other buyers
     if (allBuyerClients && allBuyerClients.size > 1) {
@@ -206,7 +208,9 @@ export async function handleIncomingMessage(
         buyerId,
         offer,
         taskId,
-        allBuyerClients
+        allBuyerClients,
+        10000,
+        logger
       );
       
       // If we have competing offers, compare them
@@ -227,8 +231,8 @@ export async function handleIncomingMessage(
         const bestOffer = allOffers[0];
         
         if (!bestOffer.isOriginal) {
-          console.log(`  ⚠ Best offer is from ${bestOffer.buyerId} (${bestOffer.offer.offeredAmount} HBAR)`);
-          console.log(`  Original offer from ${buyerId} (${offer.offeredAmount} HBAR) was beaten`);
+          if (logger) await logger.log(`Best offer is from ${bestOffer.buyerId} (${bestOffer.offer.offeredAmount} HBAR)`, 'competing-offer-response');
+          if (logger) await logger.log(`Original offer from ${buyerId} (${offer.offeredAmount} HBAR) was beaten`, 'info');
           
           // Update negotiation state with best offer
           negotiationState.offer = bestOffer.offer;
@@ -253,7 +257,7 @@ export async function handleIncomingMessage(
             };
             await client.sendMessage({ message: beatenMessage });
           } catch (error) {
-            console.error(`  ✗ Failed to notify original buyer:`, error);
+            if (logger) await logger.error(`Failed to notify original buyer: ${error instanceof Error ? error.message : String(error)}`);
           }
           
           // Update client reference to the winning buyer
@@ -263,7 +267,7 @@ export async function handleIncomingMessage(
             buyerId = bestOffer.buyerId;
           }
         } else {
-          console.log(`  ✓ Original offer from ${buyerId} is still the best`);
+          if (logger) await logger.log(`Original offer from ${buyerId} is still the best`, 'info');
           
           // Notify competing buyers that they didn't win
           for (const competingOffer of competing) {
@@ -287,7 +291,7 @@ export async function handleIncomingMessage(
                 await losingClient.sendMessage({ message: losingMessage });
               }
             } catch (error) {
-              console.error(`  ✗ Failed to notify losing buyer:`, error);
+              if (logger) await logger.error(`Failed to notify losing buyer: ${error instanceof Error ? error.message : String(error)}`);
             }
           }
         }
@@ -299,15 +303,15 @@ export async function handleIncomingMessage(
   const response = await evaluateOffer(offer, userContext.instructions);
   negotiationState.lastResponse = response;
 
-  console.log(`  Evaluation: ${response.accepted ? 'ACCEPTED' : response.counterOffer ? 'COUNTER-OFFER' : 'REJECTED'}`);
-  if (response.reason) {
-    console.log(`  Reason: ${response.reason}`);
+  if (logger) await logger.log(`Evaluation: ${response.accepted ? 'ACCEPTED' : response.counterOffer ? 'COUNTER-OFFER' : 'REJECTED'}`, 'info');
+  if (response.reason && logger) {
+    await logger.log(`Reason: ${response.reason}`, 'info');
   }
-  if (response.counterOffer) {
-    console.log(`  Counter-offer: ${response.counterOffer} HBAR per vote`);
+  if (response.counterOffer && logger) {
+    await logger.log(`Counter-offer: ${response.counterOffer} HBAR per vote`, 'info');
   }
-  if (response.rejectionReason) {
-    console.log(`  Rejection reason: ${response.rejectionReason}`);
+  if (response.rejectionReason && logger) {
+    await logger.log(`Rejection reason: ${response.rejectionReason}`, 'info');
   }
 
   // Send response back to buyer
@@ -329,19 +333,19 @@ export async function handleIncomingMessage(
     });
 
     if (response.accepted) {
-      console.log(`  ✓ Negotiation completed successfully!`);
+      if (logger) await logger.negotiationSucceeded(`Negotiation completed successfully!`);
       activeNegotiations.delete(taskId);
     } else if (response.counterOffer) {
       // Continue negotiation - wait for buyer's response
       activeNegotiations.set(taskId, negotiationState);
-      console.log(`  → Waiting for buyer's response to counter-offer...`);
+      if (logger) await logger.log(`Waiting for buyer's response to counter-offer...`, 'negotiation-started');
     } else {
       // Rejected - negotiation ended
-      console.log(`  ✗ Negotiation ended (rejected)`);
+      if (logger) await logger.negotiationFailed(`Negotiation ended (rejected)`);
       activeNegotiations.delete(taskId);
     }
   } catch (error) {
-    console.error(`  ✗ Error sending response to buyer:`, error);
+    if (logger) await logger.error(`Error sending response to buyer: ${error instanceof Error ? error.message : String(error)}`);
     // Keep negotiation active in case we can retry
     activeNegotiations.set(taskId, negotiationState);
   }
@@ -356,7 +360,7 @@ export async function pollForMessages(
   userContext: UserContext,
   pollInterval: number = 5000
 ): Promise<void> {
-  console.log(`[${buyerId}] Starting message polling (interval: ${pollInterval}ms)`);
+  // Polling function - logger would be passed if needed
   
   // Track last checked task to avoid reprocessing
   let lastCheckedTaskId: string | undefined;
@@ -378,7 +382,7 @@ export async function pollForMessages(
       // For MVP, we'll rely on the buyer sending messages directly
       
     } catch (error) {
-      console.error(`[${buyerId}] Error polling for messages:`, error);
+      // Error polling - logger would be passed if needed
       // Continue polling even on error
       await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
