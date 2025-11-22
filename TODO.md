@@ -1,0 +1,10 @@
+- Connect your hedera wallet
+- See past and current delegations
+- See all messages in the topic
+- For each proposal: graph of how votes were delegated, and how those delegates cast them
+- On the proposal, show current voting situation
+  - who has voted so far and for what
+  - % yes, no and abstain
+  - How much time is left
+  - % of quorum reached
+- 

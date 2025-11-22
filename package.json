@@ -1,0 +1,26 @@
+{
+  "name": "dark-matter-market",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "db:migrate": "pnpm --filter web db:migrate",
+    "db:migrate:up": "pnpm --filter web db:migrate:up",
+    "db:migrate:down": "pnpm --filter web db:migrate:down",
+    "db:migrate:create": "pnpm --filter web db:migrate:create",
+    "db:seed": "pnpm --filter web db:seed",
+    "cache:topics": "pnpm --filter topic-cache-cli cache:topics"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
+
