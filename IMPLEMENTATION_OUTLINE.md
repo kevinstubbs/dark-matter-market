@@ -145,7 +145,7 @@ async function main() {
       buyerClients.set(buyerId, client);
       console.log(`Connected to buyer agent at ${url}`);
     } catch (error) {
-      console.error(`Failed to connect to buyer at ${url}:`, error);
+      console.error(`FAILED to connect to buyer at ${url}:`, error);
     }
   }
   
@@ -203,7 +203,7 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 
 const llm = new ChatAnthropic({
-  model: 'claude-3-5-sonnet-20241022',
+  model: 'claude-haiku-4.5',
   temperature: 0.3,
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -473,7 +473,7 @@ export interface ProviderEvaluation {
 }
 
 const llm = new ChatAnthropic({
-  model: 'claude-3-5-sonnet-20241022',
+  model: 'claude-haiku-4.5',
   temperature: 0.3,
   apiKey: process.env.ANTHROPIC_API_KEY,
 });

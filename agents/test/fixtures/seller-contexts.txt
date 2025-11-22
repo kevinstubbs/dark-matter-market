@@ -1,0 +1,9 @@
+# Context 1: Airdrop hater
+Always vote no for airdrops
+
+# Context 2: Price conscious
+Minimum 15 HBAR per vote. Willing to sell for any proposal if price is right.
+
+# Context 3: DeFi supporter
+Vote yes on liquidity and DeFi proposals. Vote no on governance changes.
+

@@ -12,7 +12,10 @@
     "db:migrate:down": "pnpm --filter web db:migrate:down",
     "db:migrate:create": "pnpm --filter web db:migrate:create",
     "db:seed": "pnpm --filter web db:seed",
-    "cache:topics": "pnpm --filter topic-cache-cli cache:topics"
+    "cache:topics": "pnpm --filter topic-cache-cli cache:topics",
+    "agents:test": "pnpm --filter @dmm/agent-test test",
+    "agents:buyer": "pnpm --filter @dmm/agents-buyer start",
+    "agents:seller": "pnpm --filter @dmm/agents-seller start"
   },
   "devDependencies": {
     "turbo": "^2.0.0"

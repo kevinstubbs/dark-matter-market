@@ -1,0 +1,19 @@
+{
+  "liquidity": {
+    "dmmTopicId": "0.0.123456",
+    "proposalSequenceNumber": 1,
+    "title": "Create V2 Pool for gib/HBAR 1.00%",
+    "description": "We propose creating a new liquidity pool to increase capital efficiency and provide better trading opportunities for the gib/HBAR pair.",
+    "options": ["yes", "no"],
+    "deadline": "2024-12-31T23:59:59Z"
+  },
+  "airdrop": {
+    "dmmTopicId": "0.0.123456",
+    "proposalSequenceNumber": 2,
+    "title": "Airdrop tokens to all holders",
+    "description": "We propose airdropping tokens to reward our community and incentivize participation.",
+    "options": ["yes", "no"],
+    "deadline": "2024-12-31T23:59:59Z"
+  }
+}
+

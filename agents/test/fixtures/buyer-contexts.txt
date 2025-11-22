@@ -1,0 +1,9 @@
+# Context 1: Liquidity focused
+I want votes for proposals that increase liquidity
+
+# Context 2: Budget conscious
+I want votes for liquidity proposals, budget 20 HBAR per vote
+
+# Context 3: General supporter
+I want votes for proposals that benefit the ecosystem
+
