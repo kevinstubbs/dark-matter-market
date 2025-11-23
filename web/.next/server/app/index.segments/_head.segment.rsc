@@ -1,8 +1,0 @@
-1:"$Sreact.fragment"
-2:I[49352,["/_next/static/chunks/7f8692df0c49aafb.js","/_next/static/chunks/09765cc4540bca64.js"],"ViewportBoundary"]
-4:I[49352,["/_next/static/chunks/7f8692df0c49aafb.js","/_next/static/chunks/09765cc4540bca64.js"],"MetadataBoundary"]
-5:"$Sreact.suspense"
-7:I[45184,["/_next/static/chunks/7f8692df0c49aafb.js","/_next/static/chunks/09765cc4540bca64.js"],"IconMark"]
-0:{"buildId":"CaM7sBJ0Bn8uynyZeVBpj","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
-3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
-6:[["$","title","0",{"children":"Dark Matter Markets"}],["$","meta","1",{"name":"description","content":"Explore Dark Matter Markets and their topics on Hedera"}],["$","link","2",{"rel":"icon","href":"/favicon.ico?favicon.0b3bf435.ico","sizes":"256x256","type":"image/x-icon"}],["$","$L7","3",{}]]
