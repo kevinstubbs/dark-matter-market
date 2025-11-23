@@ -292,17 +292,113 @@ export interface VoteDistribution {
   no: number;
   abstain: number;
   total: number;
+  // Weighted votes (based on token balances)
+  yesWeight: string; // BigInt as string to avoid precision issues
+  noWeight: string;
+  abstainWeight: string;
+  totalWeight: string;
 }
 
-export function getVoteDistributionForProposal(
+/**
+ * Get account balance from Redis
+ */
+async function getAccountBalance(
+  accountId: string,
+  tokenId: string | null, // null for HBAR
+  chainId: number
+): Promise<string> {
+  try {
+    const { getRedisClient } = await import('./redis');
+    const redis = await getRedisClient();
+    const key = tokenId 
+      ? `balance:${accountId}:token:${tokenId}:chain:${chainId}`
+      : `balance:${accountId}:hbar:chain:${chainId}`;
+    
+    const value = await redis.get(key);
+    if (!value) return '0';
+    
+    try {
+      const data = JSON.parse(value);
+      // Support both old format (just string) and new format (object with balance and timestamp)
+      if (typeof data === 'string') {
+        return data;
+      }
+      return data.balance || '0';
+    } catch (e) {
+      // If parsing fails, assume it's the old format (just a string)
+      return value || '0';
+    }
+  } catch (error) {
+    console.error(`Error fetching balance for ${accountId}:`, error);
+    return '0';
+  }
+}
+
+/**
+ * Get delegation state from Redis
+ */
+async function getDelegation(
+  delegator: string,
+  chainId: number
+): Promise<{ delegatee: string | null } | null> {
+  try {
+    const { getRedisClient } = await import('./redis');
+    const redis = await getRedisClient();
+    const key = `delegation:${delegator}:chain:${chainId}`;
+    
+    const value = await redis.get(key);
+    if (!value) return null;
+    
+    try {
+      return JSON.parse(value) as { delegatee: string | null };
+    } catch (e) {
+      return null;
+    }
+  } catch (error) {
+    console.error(`Error fetching delegation for ${delegator}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Calculate total voting weight for an account (sum of all token balances)
+ */
+async function calculateAccountWeight(
+  accountId: string,
+  tokenIds: string[],
+  chainId: number
+): Promise<string> {
+  let totalWeight = BigInt(0);
+  
+  // Add HBAR balance (convert from tinybars to a reasonable unit, or keep as tinybars)
+  // For now, we'll keep it as tinybars to maintain precision
+  const hbarBalance = await getAccountBalance(accountId, null, chainId);
+  totalWeight += BigInt(hbarBalance);
+  
+  // Add token balances
+  for (const tokenId of tokenIds) {
+    const tokenBalance = await getAccountBalance(accountId, tokenId, chainId);
+    totalWeight += BigInt(tokenBalance);
+  }
+  
+  return totalWeight.toString();
+}
+
+export async function getVoteDistributionForProposal(
   messages: ParsedMessage[],
-  proposalSequenceNumber: number | null
-): VoteDistribution {
+  proposalSequenceNumber: number | null,
+  tokenIds: string[],
+  chainId: number
+): Promise<VoteDistribution> {
   const distribution: VoteDistribution = {
     yes: 0,
     no: 0,
     abstain: 0,
     total: 0,
+    yesWeight: '0',
+    noWeight: '0',
+    abstainWeight: '0',
+    totalWeight: '0',
   };
 
   if (proposalSequenceNumber === null) {
@@ -311,6 +407,7 @@ export function getVoteDistributionForProposal(
 
   // Track which accounts have voted (latest vote per account)
   const accountVotes = new Map<string, 'yes' | 'no' | 'abstain' | 'against'>();
+  const accountVoteTimestamps = new Map<string, string>();
 
   for (const msg of messages) {
     if (msg.type === 'Vote') {
@@ -326,23 +423,159 @@ export function getVoteDistributionForProposal(
         
         // Use account ID if available, otherwise use sequence number as fallback
         const key = msg.accountId || `seq-${msg.sequenceNumber}`;
-        // Keep the latest vote from each account
-        accountVotes.set(key, normalizedOption);
+        
+        // Keep the latest vote from each account (by timestamp)
+        const existingTimestamp = accountVoteTimestamps.get(key);
+        if (!existingTimestamp || msg.timestamp > existingTimestamp) {
+          accountVotes.set(key, normalizedOption);
+          accountVoteTimestamps.set(key, msg.timestamp);
+        }
       }
     }
   }
 
-  // Count unique votes
-  for (const [_, option] of accountVotes) {
-    if (option === 'yes') {
+  // Extract all account IDs from messages (voters, delegators, delegatees)
+  const allAccountIds = new Set<string>();
+  for (const msg of messages) {
+    if (msg.accountId) {
+      allAccountIds.add(msg.accountId);
+    }
+    // Also extract delegatee from delegation messages
+    if (msg.type === 'Delegation') {
+      const delegation = msg.data as DelegationMessage;
+      if (delegation.delegatee) {
+        allAccountIds.add(delegation.delegatee);
+      }
+    }
+  }
+  
+  // Build delegation map: delegatee -> list of delegators
+  // Check delegation status for ALL accounts (not just voters)
+  const delegationMap = new Map<string, string[]>();
+  const delegatorsSet = new Set<string>(); // Accounts that have delegated
+  const undelegatedAccounts = new Set<string>();
+  
+  // Check all accounts to see if they delegated
+  for (const accountId of allAccountIds) {
+    const delegation = await getDelegation(accountId, chainId);
+    if (delegation && delegation.delegatee) {
+      // This account has delegated to someone
+      delegatorsSet.add(accountId);
+      if (!delegationMap.has(delegation.delegatee)) {
+        delegationMap.set(delegation.delegatee, []);
+      }
+      delegationMap.get(delegation.delegatee)!.push(accountId);
+    } else {
+      // This account has not delegated (or undelegated)
+      undelegatedAccounts.add(accountId);
+    }
+  }
+
+  // Count votes and calculate weights
+  // For accounts that delegated, their vote is NOT counted, but their weight goes to the delegatee
+  // For accounts that didn't delegate, their vote and weight count for their own vote
+  
+  const voteWeights = {
+    yes: BigInt(0),
+    no: BigInt(0),
+    abstain: BigInt(0),
+  };
+
+  // Process votes from accounts that haven't delegated
+  for (const accountId of undelegatedAccounts) {
+    const vote = accountVotes.get(accountId);
+    if (!vote) continue;
+    
+    // Count the vote (only for non-delegated accounts)
+    if (vote === 'yes') {
       distribution.yes++;
-    } else if (option === 'no') {
+    } else if (vote === 'no') {
       distribution.no++;
-    } else if (option === 'abstain') {
+    } else if (vote === 'abstain') {
       distribution.abstain++;
     }
     distribution.total++;
+    
+    // Calculate weight for this account
+    const weight = await calculateAccountWeight(accountId, tokenIds, chainId);
+    const weightBigInt = BigInt(weight);
+    
+    // Add weight to the appropriate option
+    if (vote === 'yes') {
+      voteWeights.yes += weightBigInt;
+    } else if (vote === 'no') {
+      voteWeights.no += weightBigInt;
+    } else if (vote === 'abstain') {
+      voteWeights.abstain += weightBigInt;
+    }
   }
+
+  // Process delegated votes - weight goes to delegatee's vote
+  // Note: delegators' votes are NOT counted, only their weight is transferred
+  const processedDelegatees = new Set<string>(); // Track delegatees we've already processed
+  
+  for (const [delegatee, delegators] of delegationMap) {
+    // Skip if we've already processed this delegatee
+    if (processedDelegatees.has(delegatee)) {
+      continue;
+    }
+    processedDelegatees.add(delegatee);
+    
+    // Get the delegatee's vote
+    const delegateeVote = accountVotes.get(delegatee);
+    if (!delegateeVote) {
+      // Delegatee hasn't voted, delegators' weights don't count
+      continue;
+    }
+    
+    // Count the delegatee's vote (only once, delegators' votes are not counted)
+    // Only count if the delegatee hasn't delegated themselves (they're in undelegatedAccounts)
+    if (undelegatedAccounts.has(delegatee)) {
+      // Already counted in the undelegated accounts loop above, skip
+    } else {
+      // Delegatee is not in undelegatedAccounts, so count their vote here
+      if (delegateeVote === 'yes') {
+        distribution.yes++;
+      } else if (delegateeVote === 'no') {
+        distribution.no++;
+      } else if (delegateeVote === 'abstain') {
+        distribution.abstain++;
+      }
+      distribution.total++;
+    }
+    
+    // Calculate total weight from all delegators
+    let totalDelegatedWeight = BigInt(0);
+    for (const delegator of delegators) {
+      const weight = await calculateAccountWeight(delegator, tokenIds, chainId);
+      totalDelegatedWeight += BigInt(weight);
+    }
+    
+    // Add delegatee's own weight (if they haven't delegated themselves)
+    // If delegatee is in undelegatedAccounts, their weight was already added above
+    // So we only add it here if they're not in undelegatedAccounts
+    if (!undelegatedAccounts.has(delegatee)) {
+      const delegateeWeight = await calculateAccountWeight(delegatee, tokenIds, chainId);
+      totalDelegatedWeight += BigInt(delegateeWeight);
+    }
+    
+    // Add the total weight to the delegatee's vote option
+    if (delegateeVote === 'yes') {
+      voteWeights.yes += totalDelegatedWeight;
+    } else if (delegateeVote === 'no') {
+      voteWeights.no += totalDelegatedWeight;
+    } else if (delegateeVote === 'abstain') {
+      voteWeights.abstain += totalDelegatedWeight;
+    }
+  }
+
+  // Convert BigInt weights to strings
+  distribution.yesWeight = voteWeights.yes.toString();
+  distribution.noWeight = voteWeights.no.toString();
+  distribution.abstainWeight = voteWeights.abstain.toString();
+  distribution.totalWeight = (
+    voteWeights.yes + voteWeights.no + voteWeights.abstain
+  ).toString();
 
   return distribution;
 }

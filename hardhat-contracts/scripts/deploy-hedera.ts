@@ -523,13 +523,12 @@ async function createOrUpdateDMMAndProposal(
   try {
     await pgClient.connect();
 
-    // Create or update DMM
+    // Create or update DMM (token_id is now in dmm_tokens junction table)
     const dmmResult = await pgClient.query(`
-      INSERT INTO dmms (name, description, topic_id, token_id, chain_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO dmms (name, description, topic_id, chain_id)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (topic_id) 
       DO UPDATE SET 
-        token_id = EXCLUDED.token_id,
         chain_id = EXCLUDED.chain_id,
         updated_at = CURRENT_TIMESTAMP
       RETURNING id
@@ -537,11 +536,17 @@ async function createOrUpdateDMMAndProposal(
       "Localhost Governance DMM",
       "Dark Matter Market for localhost governance",
       topicId.toString(),
-      tokenId.toString(),
       chainId,
     ]);
 
     const dmmId = dmmResult.rows[0].id;
+
+    // Insert or update token association in dmm_tokens junction table
+    await pgClient.query(`
+      INSERT INTO dmm_tokens (dmm_id, token_id)
+      VALUES ($1, $2)
+      ON CONFLICT (dmm_id, token_id) DO NOTHING
+    `, [dmmId, tokenId.toString()]);
 
     // Check if proposal already exists
     const proposalName = "Create V2 Pool for gib/HBAR 1.00%";

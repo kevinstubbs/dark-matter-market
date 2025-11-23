@@ -11,6 +11,7 @@ export interface NegotiationState {
   lastResponse?: VoteOfferResponse;
   buyerId: string;
   taskId: string;
+  allBuyerIds: Set<string>; // Track all buyers involved in this negotiation
 }
 
 // Track active negotiations
@@ -24,6 +25,71 @@ interface CompetingOffer {
 }
 
 const competingOffers = new Map<string, CompetingOffer[]>(); // taskId -> competing offers
+
+/**
+ * Submit a delegation message to an HCS topic using the Hedera Agent Kit
+ */
+export async function submitDelegationToHCSTopic(
+  hederaAgentToolkit: HederaLangchainToolkit,
+  topicId: string,
+  delegateeAddress: string,
+  logger?: AgentLogger
+): Promise<void> {
+  try {
+    // Create delegation message in the format expected by the governance system
+    const delegationMessage = {
+      delegatee: delegateeAddress,
+      type: 'Delegation',
+      version: 1,
+    };
+
+    const messageJson = JSON.stringify(delegationMessage);
+
+    // Get the tools from the toolkit
+    const tools = hederaAgentToolkit.getTools();
+    
+    // Find the submit topic message tool from the consensus plugin
+    const submitTool = tools.find((tool: any) => 
+      tool.name && (
+        tool.name.includes('submit') && 
+        tool.name.includes('topic') && 
+        tool.name.includes('message')
+      )
+    );
+
+    if (!submitTool) {
+      throw new Error('Could not find submit topic message tool in Hedera Agent Kit');
+    }
+
+    // Invoke the tool to submit the delegation message
+    const result = await submitTool.invoke({
+      topicId: topicId,
+      message: messageJson,
+    });
+
+    if (logger) {
+      await logger.log(
+        `Delegation submitted to HCS topic ${topicId} for delegatee ${delegateeAddress}`,
+        'info'
+      );
+      if (result && typeof result === 'object') {
+        if (result.transactionId) {
+          await logger.log(`Transaction ID: ${result.transactionId}`, 'info');
+        }
+        if (result.sequenceNumber !== undefined) {
+          await logger.log(`Message sequence number: ${result.sequenceNumber}`, 'info');
+        }
+      }
+    }
+  } catch (error) {
+    if (logger) {
+      await logger.error(
+        `Failed to submit delegation to HCS topic: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    throw error;
+  }
+}
 
 /**
  * Submit a vote message to an HCS topic using the Hedera Agent Kit
@@ -83,7 +149,7 @@ async function submitVoteToHCSTopic(
     if (logger) {
       await logger.log(
         `Vote submitted to HCS topic ${topicId} for proposal ${proposalSequenceNumber}`,
-        'vote-submitted'
+        'info'
       );
       await logger.log(`Vote option: ${voteOption}`, 'info');
       if (result && typeof result === 'object') {
@@ -271,7 +337,10 @@ export async function handleIncomingMessage(
       ...existingNegotiation,
       offer,
       rounds: existingNegotiation.rounds + 1,
+      allBuyerIds: existingNegotiation.allBuyerIds, // Keep existing buyers
     };
+    // Add current buyer if not already tracked
+    negotiationState.allBuyerIds.add(buyerId);
     if (logger) await logger.log(`Round ${negotiationState.rounds} of negotiation`, 'negotiation-started');
   } else {
     // New negotiation - check for competing offers
@@ -281,6 +350,7 @@ export async function handleIncomingMessage(
       rounds: 1,
       buyerId,
       taskId,
+      allBuyerIds: new Set([buyerId]), // Start with current buyer
     };
     if (logger) await logger.negotiationStarted(`Starting new negotiation (Round 1)`);
     
@@ -319,6 +389,9 @@ export async function handleIncomingMessage(
           // Update negotiation state with best offer
           negotiationState.offer = bestOffer.offer;
           negotiationState.buyerId = bestOffer.buyerId;
+          // Track all buyers involved
+          negotiationState.allBuyerIds.add(buyerId);
+          competing.forEach(c => negotiationState.allBuyerIds.add(c.buyerId));
           
           // Notify original buyer that their offer was beaten
           try {
@@ -351,6 +424,8 @@ export async function handleIncomingMessage(
           }
         } else {
           if (logger) await logger.log(`Original offer from ${buyerId} is still the best`, 'info');
+          // Track all buyers involved
+          competing.forEach(c => negotiationState.allBuyerIds.add(c.buyerId));
           
           // Notify competing buyers that they didn't win
           for (const competingOffer of competing) {
@@ -418,7 +493,58 @@ export async function handleIncomingMessage(
 
     if (response.accepted) {
       if (logger) await logger.negotiationSucceeded(`Negotiation completed successfully with ${buyerId}!`, buyerId);
-      if (logger) await logger.log(`Sent acceptance to ${buyerId}`, 'info', buyerId, true);
+      
+      // Send "negotiation-success" to the buyer we agreed with
+      try {
+        const successMessage: Message = {
+          messageId: `negotiation-success-${Date.now()}`,
+          role: 'agent',
+          parts: [
+            {
+              kind: 'text',
+              text: JSON.stringify({
+                type: 'negotiation-success',
+                message: 'Negotiation completed successfully',
+              }),
+            },
+          ],
+          kind: 'message',
+        };
+        await client.sendMessage({ message: successMessage });
+        if (logger) await logger.log(`Sent negotiation-success to ${buyerId}`, 'info', buyerId, true);
+      } catch (error) {
+        if (logger) await logger.error(`Failed to send negotiation-success to ${buyerId}: ${error instanceof Error ? error.message : String(error)}`, buyerId);
+      }
+      
+      // Send "negotiation-failed" to all other buyers involved in this negotiation
+      if (allBuyerClients && negotiationState.allBuyerIds.size > 1) {
+        const otherBuyers = Array.from(negotiationState.allBuyerIds).filter(id => id !== buyerId);
+        for (const otherBuyerId of otherBuyers) {
+          try {
+            const otherClient = allBuyerClients.get(otherBuyerId);
+            if (otherClient) {
+              const failedMessage: Message = {
+                messageId: `negotiation-failed-${Date.now()}-${otherBuyerId}`,
+                role: 'agent',
+                parts: [
+                  {
+                    kind: 'text',
+                    text: JSON.stringify({
+                      type: 'negotiation-failed',
+                      message: 'Negotiation ended - agreement reached with another buyer',
+                    }),
+                  },
+                ],
+                kind: 'message',
+              };
+              await otherClient.sendMessage({ message: failedMessage });
+              if (logger) await logger.log(`Sent negotiation-failed to ${otherBuyerId}`, 'info', otherBuyerId, true);
+            }
+          } catch (error) {
+            if (logger) await logger.error(`Failed to send negotiation-failed to ${otherBuyerId}: ${error instanceof Error ? error.message : String(error)}`, otherBuyerId);
+          }
+        }
+      }
       
       // Submit vote to HCS topic when agreement is reached
       if (hederaAgentToolkit && offer.proposal.dmmTopicId && offer.proposal.proposalSequenceNumber) {

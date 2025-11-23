@@ -20,5 +20,6 @@ export interface SellerConfig {
   instructions: string; // Plain language instructions
   minPrice?: string; // Minimum HBAR per vote
   buyerUrls?: string[]; // URLs of buyer agents to connect to
+  topicId?: string; // HCS topic ID for the DMM (can also be set via DMM_TOPIC_ID env var)
 }
 

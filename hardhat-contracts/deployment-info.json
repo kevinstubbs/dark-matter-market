@@ -1,8 +1,8 @@
 {
   "network": "localhost",
-  "tokenId": "0.0.1037",
-  "topicId": "0.0.1038",
-  "contractId": "0x8A7fa94487d0d0460550e5F3F80A663c39Ac8B10",
+  "tokenId": "0.0.1043",
+  "topicId": "0.0.1044",
+  "contractId": "0x009d6C5A3b5Ba38121cD18b8B987eB226176Dd04",
   "accounts": {
     "admin": "0.0.1002",
     "buyers": [

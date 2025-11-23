@@ -4,11 +4,12 @@ import { DefaultRequestHandler } from '@a2a-js/sdk/server';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { A2AExpressApp } from '@a2a-js/sdk/server/express';
 import { config } from 'dotenv';
-import { Client, PrivateKey, AccountBalanceQuery } from '@hashgraph/sdk';
+import { Client, PrivateKey, AccountBalanceQuery, AccountId } from '@hashgraph/sdk';
 import { HederaLangchainToolkit, coreQueriesPlugin, coreConsensusPlugin } from 'hedera-agent-kit';
 import { BuyerExecutor } from './executor.js';
 import { getBuyerConfig } from './preferences.js';
-import { AgentLogger, getHederaSecret } from '@dmm/agents-shared';
+import type { BuyerConfig } from '@dmm/agents-shared';
+import { AgentLogger, getHederaSecret, getLocalnetTopicId } from '@dmm/agents-shared';
 import { resolve } from 'path';
 import { ensureVoteCast } from './vote-handler.js';
 
@@ -41,7 +42,7 @@ for (let i = 0; i < args.length; i++) {
 // 1. Command line arg: node dist/index.js configs/buyer_1.json
 // 2. Environment variable: BUYER_CONFIG=configs/buyer_1.json
 // 3. Default: buyer.json
-let buyerConfig;
+let buyerConfig: BuyerConfig;
 try {
   buyerConfig = getBuyerConfig(configPath);
 } catch (error) {
@@ -55,9 +56,44 @@ try {
 // Use port from command line if provided, otherwise from config, otherwise default to 4000
 const PORT = portOverride ?? buyerConfig.port ?? 4000;
 
-// Create logger (website URL from env or default to localhost:3000)
-const websiteUrl = process.env.WEBSITE_URL || 'http://localhost:3000';
+// Create logger (website URL from env or default to localhost:3001)
+const websiteUrl = process.env.WEBSITE_URL || 'http://localhost:3001';
 const logger = new AgentLogger(buyerConfig.id, websiteUrl);
+
+/**
+ * Create a Hedera client configured for the appropriate network
+ * Supports localhost, testnet, and mainnet based on HEDERA_NETWORK env var
+ */
+function createHederaClient(accountId: string, privateKey: PrivateKey): Client {
+  const network = process.env.HEDERA_NETWORK || 'localhost';
+  
+  let client: Client;
+  if (network === 'localhost' || network === 'localnet') {
+    // For localhost/localnet, create a custom client pointing to local nodes
+    // Localhost typically has nodes at 0.0.3, 0.0.4, 0.0.5, 0.0.6, etc.
+    client = Client.forNetwork({
+      '127.0.0.1:50211': AccountId.fromString('0.0.3'),
+      '127.0.0.1:50212': AccountId.fromString('0.0.4'),
+      '127.0.0.1:50213': AccountId.fromString('0.0.5'),
+      '127.0.0.1:50214': AccountId.fromString('0.0.6'),
+    });
+    // Set the mirror network for localhost
+    client.setMirrorNetwork(['127.0.0.1:5600']);
+    // Increase timeout for localhost deployments
+    client.setRequestTimeout(120000); // 2 minutes
+  } else if (network === 'testnet') {
+    client = Client.forTestnet();
+    client.setRequestTimeout(60000); // 1 minute
+  } else {
+    client = Client.forMainnet();
+    client.setRequestTimeout(60000); // 1 minute
+  }
+  
+  // Set the operator (account and private key)
+  client.setOperator(accountId, privateKey);
+  
+  return client;
+}
 
 // Clear previous messages on startup
 await logger.clearMessages();
@@ -76,7 +112,9 @@ try {
   
   if (!hederaSecret) {
     await logger.log(`Warning: No Hedera secret found in ${buyerConfig.envFile}. Hedera features will be unavailable.`, 'error');
+    await logger.log(`Looking for secret in: ${fullConfigPath}`, 'info');
   } else {
+    await logger.log(`Hedera secret found in ${buyerConfig.envFile}`, 'info');
     // Validate and clean the secret key
     let secretKey: string;
     if (typeof hederaSecret !== 'string') {
@@ -91,11 +129,21 @@ try {
     
     if (secretKey) {
       try {
-        // Initialize Hedera client (Testnet by default)
-        const hederaClient = Client.forTestnet().setOperator(
-          buyerConfig.walletAddress,
-          PrivateKey.fromStringECDSA(secretKey),
-        );
+        // Handle different private key formats:
+        // 1. DER-encoded (starts with 302e0201...) - use as-is
+        // 2. Hex with 0x prefix - remove 0x
+        // 3. Hex without prefix - use as-is
+        let cleanSecretKey = secretKey;
+        if (secretKey.startsWith('0x')) {
+          cleanSecretKey = secretKey.slice(2);
+        }
+        
+        // Initialize Hedera client (supports localhost, testnet, mainnet)
+        const privateKey = PrivateKey.fromStringECDSA(cleanSecretKey);
+        const network = process.env.HEDERA_NETWORK || 'localhost';
+        await logger.log(`Using Hedera network: ${network}`, 'info');
+        await logger.log(`Private key format: ${secretKey.startsWith('302e0201') ? 'DER-encoded' : secretKey.startsWith('0x') ? 'Hex with 0x' : 'Hex'}, length: ${cleanSecretKey.length}`, 'info');
+        const hederaClient = createHederaClient(buyerConfig.walletAddress, privateKey);
     
         // Log wallet ID
         await logger.log(`Hedera Wallet ID: ${buyerConfig.walletAddress}`, 'info');
@@ -112,6 +160,8 @@ try {
         }
         
         // Initialize Hedera AgentKit for use with Langchain agent
+        // The client is already configured with .setOperator() which enables autonomous execution
+        // Transactions will execute automatically using the operator account (buyerConfig.walletAddress)
         hederaAgentToolkit = new HederaLangchainToolkit({
           client: hederaClient,
           configuration: {
@@ -120,10 +170,14 @@ try {
         });
         
         await logger.log(`Hedera AgentKit initialized successfully`, 'info');
+        await logger.log(`hederaAgentToolkit variable is: ${hederaAgentToolkit ? 'set' : 'undefined'}`, 'info');
         
         // Check if buyer needs to cast a vote at startup
-        // Get topic ID and proposal sequence number from environment or config
-        const topicId = process.env.DMM_TOPIC_ID || buyerConfig.topicId;
+        // Get topic ID from website and proposal sequence number from environment or config
+        await logger.log(`Fetching topic ID from website...`, 'info');
+        const topicId = await getLocalnetTopicId(websiteUrl);
+        await logger.log(`Topic ID from website: ${topicId || 'not found'}`, 'info');
+        
         const proposalSequenceNumber = process.env.PROPOSAL_SEQUENCE_NUMBER 
           ? parseInt(process.env.PROPOSAL_SEQUENCE_NUMBER, 10) 
           : buyerConfig.proposalSequenceNumber;
@@ -140,7 +194,7 @@ try {
               logger
             );
             if (voteCast) {
-              await logger.log(`Vote successfully cast at startup`, 'vote-cast');
+              await logger.log(`Vote successfully cast at startup`, 'info');
             }
           } catch (voteError) {
             await logger.error(
@@ -150,7 +204,7 @@ try {
           }
         } else {
           if (!topicId) {
-            await logger.log(`DMM_TOPIC_ID not set, skipping vote check`, 'info');
+            await logger.log(`Topic ID not found from website, skipping vote check`, 'info');
           }
           if (!proposalSequenceNumber) {
             await logger.log(`PROPOSAL_SEQUENCE_NUMBER not set, skipping vote check`, 'info');
@@ -161,12 +215,19 @@ try {
         }
       } catch (keyError) {
         await logger.log(`Error creating Hedera private key: ${keyError instanceof Error ? keyError.message : String(keyError)}. Please check that HEDERA_SECRET in ${buyerConfig.envFile} is a valid hex-encoded private key.`, 'error');
+        await logger.log(`hederaAgentToolkit after keyError: ${hederaAgentToolkit ? 'set' : 'undefined'}`, 'info');
       }
+    } else {
+      await logger.log(`Secret key is empty, hederaAgentToolkit will remain undefined`, 'info');
     }
   }
 } catch (hederaError) {
   await logger.log(`Error initializing Hedera: ${hederaError instanceof Error ? hederaError.message : String(hederaError)}`, 'error');
+  await logger.log(`hederaAgentToolkit after hederaError: ${hederaAgentToolkit ? 'set' : 'undefined'}`, 'info');
 }
+
+// Log final status before creating executor
+await logger.log(`Final hederaAgentToolkit status before creating executor: ${hederaAgentToolkit ? 'available' : 'undefined'}`, 'info');
 
 // Create agent card
 const agentCard: AgentCard = {
@@ -187,6 +248,7 @@ const agentCard: AgentCard = {
 
 // Create executor (pass config path, logger, Hedera toolkit, balance, and buyer URL)
 const buyerUrl = `http://localhost:${PORT}`;
+await logger.log(`Creating BuyerExecutor with hederaAgentToolkit: ${hederaAgentToolkit ? 'available' : 'undefined'}`, 'info');
 const executor = new BuyerExecutor(configPath, logger, hederaAgentToolkit, buyerBalance, buyerUrl);
 const taskStore = new InMemoryTaskStore();
 const requestHandler = new DefaultRequestHandler(agentCard, taskStore, executor);

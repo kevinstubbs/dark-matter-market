@@ -7,10 +7,34 @@ export interface VoteDistribution {
   no: number;
   abstain: number;
   total: number;
+  // Weighted votes (based on token balances)
+  yesWeight: string; // BigInt as string to avoid precision issues
+  noWeight: string;
+  abstainWeight: string;
+  totalWeight: string;
 }
 
 interface VoteDistributionChartProps {
   distribution: VoteDistribution;
+}
+
+/**
+ * Format a large number (as string) to a readable format
+ */
+function formatWeight(weightStr: string): string {
+  try {
+    const weight = BigInt(weightStr);
+    if (weight === BigInt(0)) return '0';
+    
+    // Convert to number for display (may lose precision for very large numbers)
+    const num = Number(weight);
+    if (num < 1000) return num.toString();
+    if (num < 1000000) return (num / 1000).toFixed(2) + 'K';
+    if (num < 1000000000) return (num / 1000000).toFixed(2) + 'M';
+    return (num / 1000000000).toFixed(2) + 'B';
+  } catch (e) {
+    return weightStr;
+  }
 }
 
 const COLORS = {
@@ -39,6 +63,22 @@ export function VoteDistributionChart({ distribution }: VoteDistributionChartPro
     { option: 'No', votes: distribution.no },
     { option: 'Abstain', votes: distribution.abstain },
   ];
+
+  // Calculate weight percentages
+  const totalWeight = BigInt(distribution.totalWeight || '0');
+  const yesWeight = BigInt(distribution.yesWeight || '0');
+  const noWeight = BigInt(distribution.noWeight || '0');
+  const abstainWeight = BigInt(distribution.abstainWeight || '0');
+  
+  const yesWeightPercent = totalWeight > 0 
+    ? (Number(yesWeight * BigInt(10000) / totalWeight) / 100).toFixed(1)
+    : '0';
+  const noWeightPercent = totalWeight > 0
+    ? (Number(noWeight * BigInt(10000) / totalWeight) / 100).toFixed(1)
+    : '0';
+  const abstainWeightPercent = totalWeight > 0
+    ? (Number(abstainWeight * BigInt(10000) / totalWeight) / 100).toFixed(1)
+    : '0';
 
   return (
     <div className="space-y-6">
@@ -124,38 +164,76 @@ export function VoteDistributionChart({ distribution }: VoteDistributionChartPro
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {distribution.yes}
+      <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+        <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Vote Counts (Number of Vote Messages)
+        </h4>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+              {distribution.yes}
+            </div>
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">Yes</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-500">
+              {distribution.total > 0
+                ? `${((distribution.yes / distribution.total) * 100).toFixed(1)}%`
+                : '0%'}
+            </div>
           </div>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">Yes</div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-500">
-            {distribution.total > 0
-              ? `${((distribution.yes / distribution.total) * 100).toFixed(1)}%`
-              : '0%'}
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+              {distribution.no}
+            </div>
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">No</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-500">
+              {distribution.total > 0
+                ? `${((distribution.no / distribution.total) * 100).toFixed(1)}%`
+                : '0%'}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-zinc-600 dark:text-zinc-400">
+              {distribution.abstain}
+            </div>
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">Abstain</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-500">
+              {distribution.total > 0
+                ? `${((distribution.abstain / distribution.total) * 100).toFixed(1)}%`
+                : '0%'}
+            </div>
           </div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-            {distribution.no}
+        
+        <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mt-6">
+          Voting Weight (Token Balances)
+        </h4>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+              {formatWeight(distribution.yesWeight)}
+            </div>
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">Yes Weight</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-500">
+              {yesWeightPercent}%
+            </div>
           </div>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">No</div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-500">
-            {distribution.total > 0
-              ? `${((distribution.no / distribution.total) * 100).toFixed(1)}%`
-              : '0%'}
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+              {formatWeight(distribution.noWeight)}
+            </div>
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">No Weight</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-500">
+              {noWeightPercent}%
+            </div>
           </div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-zinc-600 dark:text-zinc-400">
-            {distribution.abstain}
-          </div>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">Abstain</div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-500">
-            {distribution.total > 0
-              ? `${((distribution.abstain / distribution.total) * 100).toFixed(1)}%`
-              : '0%'}
+          <div className="text-center">
+            <div className="text-2xl font-bold text-zinc-600 dark:text-zinc-400">
+              {formatWeight(distribution.abstainWeight)}
+            </div>
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">Abstain Weight</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-500">
+              {abstainWeightPercent}%
+            </div>
           </div>
         </div>
       </div>

@@ -49,6 +49,13 @@ export async function GET(
 
     const dmm = dmmResult.rows[0];
 
+    // Get token IDs for this DMM
+    const tokensResult = await client.query<{ token_id: string }>(
+      'SELECT token_id FROM dmm_tokens WHERE dmm_id = $1 ORDER BY created_at',
+      [proposal.dmm_id]
+    );
+    const tokenIds = tokensResult.rows.map(row => row.token_id);
+
     // Fetch and parse messages
     const messages = await fetchTopicMessages(dmm.topic_id, dmm.chain_id);
     const parsed = parseMessages(messages);
@@ -60,8 +67,13 @@ export async function GET(
       proposal.description
     );
 
-    // Get vote distribution
-    const distribution = getVoteDistributionForProposal(parsed, proposalSequenceNumber);
+    // Get vote distribution (with weights)
+    const distribution = await getVoteDistributionForProposal(
+      parsed,
+      proposalSequenceNumber,
+      tokenIds,
+      dmm.chain_id
+    );
 
     return NextResponse.json(
       { distribution },

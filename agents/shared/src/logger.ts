@@ -33,7 +33,7 @@ export class AgentLogger {
   private agentId: string;
   private websiteUrl: string;
 
-  constructor(agentId: string, websiteUrl: string = 'http://localhost:3000') {
+  constructor(agentId: string, websiteUrl: string = 'http://localhost:3001') {
     this.agentId = agentId;
     this.websiteUrl = websiteUrl;
   }

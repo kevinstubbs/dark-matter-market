@@ -2,6 +2,71 @@ import type { HederaLangchainToolkit } from 'hedera-agent-kit';
 import { AgentLogger } from '@dmm/agents-shared';
 
 /**
+ * Submit a delegation message to an HCS topic using the Hedera Agent Kit
+ */
+export async function submitDelegationToHCSTopic(
+  hederaAgentToolkit: HederaLangchainToolkit,
+  topicId: string,
+  delegateeAddress: string,
+  logger?: AgentLogger
+): Promise<void> {
+  try {
+    // Create delegation message in the format expected by the governance system
+    const delegationMessage = {
+      delegatee: delegateeAddress,
+      type: 'Delegation',
+      version: 1,
+    };
+
+    const messageJson = JSON.stringify(delegationMessage);
+
+    // Get the tools from the toolkit
+    const tools = hederaAgentToolkit.getTools();
+    
+    // Find the submit topic message tool from the consensus plugin
+    const submitTool = tools.find((tool: any) => 
+      tool.name && (
+        tool.name.includes('submit') && 
+        tool.name.includes('topic') && 
+        tool.name.includes('message')
+      )
+    );
+
+    if (!submitTool) {
+      throw new Error('Could not find submit topic message tool in Hedera Agent Kit');
+    }
+
+    // Invoke the tool to submit the delegation message
+    const result = await submitTool.invoke({
+      topicId: topicId,
+      message: messageJson,
+    });
+
+    if (logger) {
+      await logger.log(
+        `Delegation submitted to HCS topic ${topicId} for delegatee ${delegateeAddress}`,
+        'info'
+      );
+      if (result && typeof result === 'object') {
+        if (result.transactionId) {
+          await logger.log(`Transaction ID: ${result.transactionId}`, 'info');
+        }
+        if (result.sequenceNumber !== undefined) {
+          await logger.log(`Message sequence number: ${result.sequenceNumber}`, 'info');
+        }
+      }
+    }
+  } catch (error) {
+    if (logger) {
+      await logger.error(
+        `Failed to submit delegation to HCS topic: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    throw error;
+  }
+}
+
+/**
  * Check if the buyer has already cast a vote for a specific proposal
  */
 export async function hasVoted(
@@ -156,7 +221,7 @@ export async function castVote(
     if (logger) {
       await logger.log(
         `Vote cast for proposal ${proposalSequenceNumber} on topic ${topicId}`,
-        'vote-cast'
+        'info'
       );
       await logger.log(`Vote option: ${voteOption}`, 'info');
       if (result && typeof result === 'object') {

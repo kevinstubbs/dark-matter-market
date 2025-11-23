@@ -24,3 +24,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.react-flow__panel.react-flow__controls.vertical.bottom.left {
+  color: black;
+}
