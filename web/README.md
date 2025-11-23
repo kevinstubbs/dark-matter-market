@@ -29,7 +29,7 @@ docker compose up -d
 This will:
 - Start a PostgreSQL 16 container
 - Create the `dark_matter_market` database
-- Expose PostgreSQL on port `5433` (to avoid conflicts with local PostgreSQL)
+- Expose PostgreSQL on port `5432` (to avoid conflicts with local PostgreSQL)
 
 To verify the database is running:
 ```bash
@@ -41,11 +41,11 @@ docker compose ps
 Create a `.env.local` file in the `web` directory:
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/dark_matter_market
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dark_matter_market
 
 # For node-pg-migrate
 PGHOST=localhost
-PGPORT=5433
+PGPORT=5432
 PGDATABASE=dark_matter_market
 PGUSER=postgres
 PGPASSWORD=postgres

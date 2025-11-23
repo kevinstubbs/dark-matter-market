@@ -12,7 +12,7 @@ pnpm install
 2. Create a `.env.local` file in the `cli/` directory (or project root) with your configuration:
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dark_matter_market
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://localhost:7000
 HEDERA_MIRROR_NODE_MAINNET_URL=https://mainnet-public.mirrornode.hedera.com
 HEDERA_MIRROR_NODE_TESTNET_URL=https://testnet.mirrornode.hedera.com
 CACHE_REFRESH_INTERVAL=60000

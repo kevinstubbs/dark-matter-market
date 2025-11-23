@@ -4,7 +4,7 @@ let redisClient: RedisClientType | null = null;
 
 export async function getRedisClient(): Promise<RedisClientType> {
   if (!redisClient) {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:7000';
     redisClient = createClient({
       url: redisUrl,
     });

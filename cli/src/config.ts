@@ -3,7 +3,7 @@ export const config = {
     url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/dark_matter_market',
   },
   redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    url: process.env.REDIS_URL || 'redis://localhost:7000',
   },
   hedera: {
     mirrorNodeUrl: {

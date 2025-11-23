@@ -100,8 +100,8 @@ docker-compose up -d
 ```
 
 This will start:
-- PostgreSQL on port 5433
-- Redis on port 6379
+- PostgreSQL on port 5432
+- Redis on port 7000
 - Web application on port 3000 (if built)
 
 ## Architecture
