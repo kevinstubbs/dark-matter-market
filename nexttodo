@@ -1,0 +1,5 @@
+1. Use the localhost accounts for the buyer and seller agents
+2. Update ignition script to create a token and mint it to the accounts. Each one should have a different amount, but at least 10000.
+3. The last three accounts should be used for yes, no, abstain voting power.
+4. Script should create an HCS topic for the proposal, votes, delegates.
+5. Create a contract which lets buyers deposit incentive money in escrow for a particular proposal and outcome, and has a function where a trusted wallet can  - if the proposal completed then allocate rewards to each user who voted for that outcome.

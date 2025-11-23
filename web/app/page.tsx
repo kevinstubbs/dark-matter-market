@@ -1,8 +1,11 @@
 import { getAllDMMsWithProposals, type DMMWithProposals } from "@/lib/db";
 import ReactMarkdown from "react-markdown";
-import Image from "next/image";
 import { TokenInfo } from "@/app/components/TokenInfo";
 import { getHashscanUrl } from "@/lib/utils";
+import { DMMVotesChart } from "@/app/components/DMMVotesChart";
+import { ProposalVoteChart } from "@/app/components/ProposalVoteChart";
+import { TopicStats } from "@/app/components/TopicStats";
+import { Header } from "./components/Header";
 
 export default async function Home() {
   let dmms: DMMWithProposals[] = [];
@@ -17,32 +20,7 @@ export default async function Home() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex min-h-screen w-full max-w-4xl flex-col py-16 px-8 bg-white dark:bg-black">
-        <div className="mb-12">
-          <div className="flex items-center gap-4 mb-4">
-            <Image
-              src="/images/littledmm.png"
-              alt="Little DMM"
-              width={64}
-              height={64}
-              className="object-contain"
-              unoptimized
-            />
-            <h1 className="text-4xl font-bold leading-tight tracking-tight text-black dark:text-zinc-50">
-              Dark Matter Markets
-            </h1>
-          </div>
-          <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400 mb-4">
-            Alien incentives. Human rewards.
-          </p>
-          <div>
-            <a
-              href="/agents"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-            >
-              Interrogate Agents→
-            </a>
-          </div>
-        </div>
+        <Header />
 
         {error && (
           <div className="mb-8 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
@@ -115,6 +93,9 @@ export default async function Home() {
                     </div>
                   </div>
 
+                  {/* Topic Stats and Chart */}
+                  <TopicStats topicId={dmm.topic_id} />
+
                   {dmm.proposals.length > 0 && (
                     <div className="border-t border-zinc-200 dark:border-zinc-800 pt-6">
                       <h3 className="text-lg font-semibold text-black dark:text-zinc-50 mb-4">
@@ -164,6 +145,9 @@ export default async function Home() {
                                   )}
                                 </div>
                               </div>
+
+                              {/* Vote Distribution Chart */}
+                              <ProposalVoteChart proposalId={proposal.id} />
                             </div>
                           );
                         })}

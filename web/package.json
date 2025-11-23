@@ -19,6 +19,8 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-markdown": "^10.1.0",
+    "react-vfx": "^0.13.0",
+    "recharts": "^2.12.7",
     "redis": "^4.7.0"
   },
   "devDependencies": {
