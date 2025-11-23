@@ -2,7 +2,6 @@ import { getAllDMMsWithProposals, type DMMWithProposals } from "@/lib/db";
 import ReactMarkdown from "react-markdown";
 import { TokenInfo } from "@/app/components/TokenInfo";
 import { getHashscanUrl } from "@/lib/utils";
-import { DMMVotesChart } from "@/app/components/DMMVotesChart";
 import { ProposalVoteChart } from "@/app/components/ProposalVoteChart";
 import { TopicStats } from "@/app/components/TopicStats";
 import { Header } from "./components/Header";
@@ -87,7 +86,7 @@ export default async function Home() {
                         </svg>
                       </a>
                     </div>
-                    <TokenInfo tokenId={dmm.token_id} chainId={dmm.chain_id} />
+                    <TokenInfo tokenIds={dmm.tokens} chainId={dmm.chain_id} />
                     <div className="text-sm text-zinc-500 dark:text-zinc-500">
                       Created: {new Date(dmm.created_at).toLocaleDateString()}
                     </div>

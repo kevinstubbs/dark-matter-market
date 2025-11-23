@@ -33,3 +33,16 @@ export function getAgentMessagesKey(agentId: string): string {
   return `agent:${agentId}:messages`;
 }
 
+// Topic message cache keys
+export function getTopicMessagesKey(topicId: string): string {
+  return `topic:${topicId}:messages`;
+}
+
+export function getTopicLastSequenceKey(topicId: string): string {
+  return `topic:${topicId}:last_sequence`;
+}
+
+export function getTopicTimeseriesKey(topicId: string): string {
+  return `topic:${topicId}:timeseries`;
+}
+
