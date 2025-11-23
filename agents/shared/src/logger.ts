@@ -11,6 +11,7 @@ export type MessageType =
   | 'competing-offer-request'
   | 'competing-offer-response'
   | 'seller-ready'
+  | 'buyer-ready'
   | 'connection-established'
   | 'connection-failed'
   | 'error'

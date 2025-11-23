@@ -63,6 +63,8 @@ await logger.clearMessages();
 await logger.log(`Buyer Agent "${buyerConfig.name}" starting...`, 'agent-started');
 
 // Initialize Hedera client and check balance
+let hederaAgentToolkit: HederaLangchainToolkit | undefined;
+let buyerBalance: string | undefined;
 try {
   // Get the config file path to resolve the env file (same logic as config loader)
   const configFile = configPath || process.env.BUYER_CONFIG || 'buyer.json';
@@ -88,22 +90,20 @@ try {
       const balanceQuery = new AccountBalanceQuery()
         .setAccountId(buyerConfig.walletAddress);
       const balance = await balanceQuery.execute(hederaClient);
-      const hbarBalance = balance.hbars.toString();
-      await logger.log(`Hedera Balance: ${hbarBalance} HBAR`, 'info');
+      buyerBalance = balance.hbars.toString();
+      await logger.log(`Hedera Balance: ${buyerBalance} HBAR`, 'info');
     } catch (balanceError) {
       await logger.log(`Failed to query balance: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`, 'error');
     }
     
-    // Initialize Hedera AgentKit (for future use)
-    const hederaAgentToolkit = new HederaLangchainToolkit({
+    // Initialize Hedera AgentKit for use with Langchain agent
+    hederaAgentToolkit = new HederaLangchainToolkit({
       client: hederaClient,
       configuration: {
         plugins: [coreQueriesPlugin]
       },
     });
     
-    // Store toolkit globally for future use (if needed)
-    // Note: We're keeping A2A for now, but AgentKit is available for Hedera operations
     await logger.log(`Hedera AgentKit initialized successfully`, 'info');
   }
 } catch (hederaError) {
@@ -127,8 +127,9 @@ const agentCard: AgentCard = {
   },
 };
 
-// Create executor (pass config path and logger so it uses the same config and logger)
-const executor = new BuyerExecutor(configPath, logger);
+// Create executor (pass config path, logger, Hedera toolkit, balance, and buyer URL)
+const buyerUrl = `http://localhost:${PORT}`;
+const executor = new BuyerExecutor(configPath, logger, hederaAgentToolkit, buyerBalance, buyerUrl);
 const taskStore = new InMemoryTaskStore();
 const requestHandler = new DefaultRequestHandler(agentCard, taskStore, executor);
 

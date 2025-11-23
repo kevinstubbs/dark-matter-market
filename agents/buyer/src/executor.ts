@@ -6,16 +6,24 @@ import {
 import { A2AClient } from '@a2a-js/sdk/client';
 import { VoteOffer, VoteOfferResponse, ProposalInfo, CompetingOfferRequest, CompetingOfferResponse, AgentLogger, getAgentIdFromUrl } from '@dmm/agents-shared';
 import { loadBuyerContext } from './preferences.js';
-import { createOfferWithLLM } from './llm-evaluator.js';
+import { BuyerAgentManager } from './llm-evaluator.js';
+import type { HederaLangchainToolkit } from 'hedera-agent-kit';
 
 export class BuyerExecutor implements AgentExecutor {
   private configPath?: string;
   private logger: AgentLogger;
+  private agentManager: BuyerAgentManager;
+  private balance?: string;
+  private buyerUrl?: string;
 
-  constructor(configPath?: string, logger?: AgentLogger) {
+  constructor(configPath?: string, logger?: AgentLogger, hederaAgentToolkit?: HederaLangchainToolkit, balance?: string, buyerUrl?: string) {
     this.configPath = configPath;
     // Create a default logger if none provided (for backward compatibility)
     this.logger = logger || new AgentLogger('buyer-unknown');
+    // Create and reuse the agent manager for the entire session
+    this.agentManager = new BuyerAgentManager(hederaAgentToolkit);
+    this.balance = balance;
+    this.buyerUrl = buyerUrl;
   }
 
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
@@ -48,7 +56,7 @@ export class BuyerExecutor implements AgentExecutor {
         const maxPrice = buyerContext.maxPrice ? parseFloat(buyerContext.maxPrice) : Infinity;
         
         // Use LLM to evaluate if we should beat this offer
-        const evaluation = await createOfferWithLLM(
+        const evaluation = await this.agentManager.evaluateProposal(
           request.proposal,
           buyerContext.instructions,
           desiredOutcome
@@ -139,9 +147,49 @@ export class BuyerExecutor implements AgentExecutor {
       }
       
       if (messageData.type === 'seller-ready') {
-        // Seller is ready - create a test proposal and send an offer
+        // Seller is ready - respond with buyer-ready message including balance
         const sellerId = getAgentIdFromUrl(messageData.sellerUrl) || 'unknown';
+        const sellerBalance = messageData.balance;
+        
         await this.logger.log(`Received seller-ready message from ${messageData.sellerUrl} (${sellerId})`, 'seller-ready', sellerId);
+        if (sellerBalance) {
+          await this.logger.log(`Seller balance: ${sellerBalance} HBAR`, 'info', sellerId);
+        }
+        
+        // Respond with buyer-ready message including our balance
+        try {
+          const sellerClient = await A2AClient.fromCardUrl(`${messageData.sellerUrl}/.well-known/agent-card.json`);
+          const { v4: uuidv4 } = await import('uuid');
+          
+          await sellerClient.sendMessage({
+            message: {
+              messageId: uuidv4(),
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: JSON.stringify({
+                    type: 'buyer-ready',
+                    buyerUrl: this.buyerUrl || 'unknown',
+                    balance: this.balance || 'unknown',
+                    message: 'Buyer agent ready to send vote purchase offers',
+                  }),
+                },
+              ],
+              kind: 'message',
+            },
+          });
+          
+          if (this.balance) {
+            await this.logger.log(`Sent buyer-ready message to seller ${sellerId} with balance: ${this.balance} HBAR`, 'info', sellerId);
+          } else {
+            await this.logger.log(`Sent buyer-ready message to seller ${sellerId} (balance unknown)`, 'info', sellerId);
+          }
+        } catch (error) {
+          await this.logger.error(`Failed to send buyer-ready message to seller ${sellerId}: ${error instanceof Error ? error.message : String(error)}`, sellerId);
+        }
+        
+        // Create a test proposal and send an offer
         await this.logger.log(`Creating vote purchase offer...`, 'info');
         
         proposal = {
@@ -175,7 +223,7 @@ export class BuyerExecutor implements AgentExecutor {
     
     // Use LLM to evaluate if this proposal aligns with buyer's context
     // and determine what offer to make
-    const evaluation = await createOfferWithLLM(proposal, buyerContext.instructions, desiredOutcome);
+    const evaluation = await this.agentManager.evaluateProposal(proposal, buyerContext.instructions, desiredOutcome);
     
     if (!evaluation.shouldPursue) {
       // Buyer's context indicates this proposal isn't worth pursuing

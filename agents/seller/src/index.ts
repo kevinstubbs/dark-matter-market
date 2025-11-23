@@ -58,6 +58,7 @@ async function main() {
   await globalLogger.log(`Instructions: ${globalUserContext.instructions}`, 'info');
   
   // Initialize Hedera client and check balance
+  let sellerBalance: string | undefined;
   try {
     // Get the config file path to resolve the env file (same logic as config loader)
     const configFile = configPath || process.env.SELLER_CONFIG || 'seller.json';
@@ -83,8 +84,8 @@ async function main() {
         const balanceQuery = new AccountBalanceQuery()
           .setAccountId(sellerConfig.walletAddress);
         const balance = await balanceQuery.execute(hederaClient);
-        const hbarBalance = balance.hbars.toString();
-        await globalLogger.log(`Hedera Balance: ${hbarBalance} HBAR`, 'info');
+        sellerBalance = balance.hbars.toString();
+        await globalLogger.log(`Hedera Balance: ${sellerBalance} HBAR`, 'info');
       } catch (balanceError) {
         await globalLogger.log(`Failed to query balance: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`, 'error');
       }
@@ -170,6 +171,7 @@ async function main() {
               text: JSON.stringify({
                 type: 'seller-ready',
                 sellerUrl: `http://localhost:${PORT}`,
+                balance: sellerBalance || 'unknown',
                 message: 'Seller agent ready to receive vote purchase offers',
               }),
             },
@@ -251,6 +253,29 @@ class SellerExecutor implements AgentExecutor {
     
     try {
       const messageData = JSON.parse(messageText);
+      
+      // Handle buyer-ready message (response to seller-ready)
+      if (messageData.type === 'buyer-ready') {
+        const buyerId = getAgentIdFromUrl(messageData.buyerUrl) || 'unknown';
+        const buyerBalance = messageData.balance;
+        
+        if (globalLogger) {
+          await globalLogger.log(`Received buyer-ready message from ${messageData.buyerUrl} (${buyerId})`, 'buyer-ready', buyerId);
+          if (buyerBalance) {
+            await globalLogger.log(`Buyer balance: ${buyerBalance} HBAR`, 'info', buyerId);
+          }
+        }
+        
+        eventBus.publish({
+          kind: 'task-status-update',
+          taskId,
+          status: { state: 'completed', timestamp: new Date().toISOString() },
+          final: true,
+        } as any);
+        eventBus.finished();
+        return;
+      }
+      
       if (messageData.type === 'competing-offer-response') {
         // Find which buyer sent this (for now, try to match by checking all buyers)
         // In production, this would come from message metadata
@@ -274,7 +299,7 @@ class SellerExecutor implements AgentExecutor {
         return;
       }
     } catch (e) {
-      // Not a competing offer response, continue with normal handling
+      // Not a known message type, continue with normal handling
     }
     
     // Extract buyer ID - for MVP, use first connected buyer
