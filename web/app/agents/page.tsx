@@ -23,9 +23,48 @@ export default function AgentsPage() {
 
   // Playback controls
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState<number | null>(null);
-  const [playbackSpeed, setPlaybackSpeed] = useState<0.5 | 1 | 2>(1);
+  const [currentTime, setCurrentTime] = useState<number | null>(null); // Updates immediately
+  const [filteredTime, setFilteredTime] = useState<number | null>(null); // Throttled - used for filtering
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [isManuallyScrubbed, setIsManuallyScrubbed] = useState(false);
+  
+  // Throttle filteredTime updates to max once every 5 seconds
+  const lastFilteredUpdateTimeRef = useRef<number>(0);
+  const pendingFilteredTimeRef = useRef<number | null>(null);
+  const THROTTLE_INTERVAL = 2500;
+  
+  // Update filteredTime (throttled) when currentTime changes
+  useEffect(() => {
+    if (currentTime === null) {
+      setFilteredTime(null);
+      return;
+    }
+    
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastFilteredUpdateTimeRef.current;
+    
+    // Store the latest time value
+    pendingFilteredTimeRef.current = currentTime;
+    
+    // If enough time has passed, update immediately
+    if (timeSinceLastUpdate >= THROTTLE_INTERVAL) {
+      setFilteredTime(currentTime);
+      lastFilteredUpdateTimeRef.current = now;
+      pendingFilteredTimeRef.current = null;
+    } else {
+      // Schedule an update after the remaining time
+      const remainingTime = THROTTLE_INTERVAL - timeSinceLastUpdate;
+      const timeoutId = setTimeout(() => {
+        if (pendingFilteredTimeRef.current !== null) {
+          setFilteredTime(pendingFilteredTimeRef.current);
+          lastFilteredUpdateTimeRef.current = Date.now();
+          pendingFilteredTimeRef.current = null;
+        }
+      }, remainingTime);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [currentTime]);
 
   useEffect(() => {
     // Load agent list
@@ -66,9 +105,12 @@ export default function AgentsPage() {
       });
       setMessages(messagesMap);
 
-      // Initialize currentTime to real time if not set
+      // Initialize currentTime and filteredTime to real time if not set
       if (currentTime === null) {
-        setCurrentTime(Date.now());
+        const now = Date.now();
+        setCurrentTime(now);
+        setFilteredTime(now);
+        lastFilteredUpdateTimeRef.current = now;
       }
     };
 
@@ -104,21 +146,20 @@ export default function AgentsPage() {
     };
   }, [messages, realTime]);
 
-  // Filter messages based on currentTime
+  // Filter messages based on filteredTime (throttled)
   const filterMessagesByTime = useCallback((msgs: AgentMessage[]): AgentMessage[] => {
-    if (currentTime === null) return msgs;
-    return msgs.filter(msg => new Date(msg.timestamp).getTime() <= currentTime);
-  }, [currentTime]);
+    if (filteredTime === null) return msgs;
+    return msgs.filter(msg => new Date(msg.timestamp).getTime() <= filteredTime);
+  }, [filteredTime]);
 
   // Filtered messages for display
   const filteredMessages = useMemo(() => {
-    if (currentTime === null) return messages;
     const filtered: Record<string, AgentMessage[]> = {};
     Object.entries(messages).forEach(([agentId, msgs]) => {
       filtered[agentId] = filterMessagesByTime(msgs);
     });
     return filtered;
-  }, [messages, currentTime, filterMessagesByTime]);
+  }, [messages, filterMessagesByTime]);
 
   // Find the last message type between two agents (using filtered messages)
   const getLastMessageTypeBetweenAgents = useCallback((buyerId: string, sellerId: string): string | null => {
@@ -202,7 +243,7 @@ export default function AgentsPage() {
     if (!isPlaying && !isManuallyScrubbed && currentTime !== null) {
       setCurrentTime(realTime);
     }
-  }, [realTime, isPlaying, isManuallyScrubbed]);
+  }, [realTime, isPlaying, isManuallyScrubbed, currentTime]);
 
   // Playback effect
   const playbackStartTimeRef = useRef<number | null>(null);
@@ -216,12 +257,16 @@ export default function AgentsPage() {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
 
+  // Store previous playback speed to detect changes
+  const previousPlaybackSpeedRef = useRef<number>(playbackSpeed);
+
   useEffect(() => {
     if (!isPlaying) {
       playbackStartTimeRef.current = null;
       playbackStartPositionRef.current = null;
       playbackStartTimeRangeMinRef.current = null;
       playbackStartTimeRangeMaxRef.current = null;
+      previousPlaybackSpeedRef.current = playbackSpeed;
       return;
     }
 
@@ -232,19 +277,30 @@ export default function AgentsPage() {
     const duration = timeRange.max - timeRange.min;
     if (duration <= 0) return;
 
-    // Only initialize start time/position when playback first starts
+    const startMin = timeRange.min;
+    const startMax = timeRange.max;
+    const startDuration = startMax - startMin;
+
+    // Initialize or handle speed change
     if (playbackStartTimeRef.current === null) {
+      // First time starting playback
       playbackStartTimeRef.current = Date.now();
-      playbackStartPositionRef.current = currentTimeRef.current - timeRange.min;
-      playbackStartTimeRangeMinRef.current = timeRange.min;
-      playbackStartTimeRangeMaxRef.current = timeRange.max;
+      playbackStartPositionRef.current = currentTimeRef.current - startMin;
+      playbackStartTimeRangeMinRef.current = startMin;
+      playbackStartTimeRangeMaxRef.current = startMax;
+    } else if (previousPlaybackSpeedRef.current !== playbackSpeed) {
+      // Speed changed during playback - recalculate start time/position to maintain current position
+      const currentPosition = currentTimeRef.current - startMin;
+      playbackStartTimeRef.current = Date.now();
+      playbackStartPositionRef.current = currentPosition;
+      playbackStartTimeRangeMinRef.current = startMin;
+      playbackStartTimeRangeMaxRef.current = startMax;
     }
+
+    previousPlaybackSpeedRef.current = playbackSpeed;
 
     const startTime = playbackStartTimeRef.current;
     const startPosition = playbackStartPositionRef.current!;
-    const startMin = playbackStartTimeRangeMinRef.current!;
-    const startMax = playbackStartTimeRangeMaxRef.current!;
-    const startDuration = startMax - startMin;
     const playbackDuration = startDuration / playbackSpeed;
 
     const interval = setInterval(() => {
@@ -253,7 +309,7 @@ export default function AgentsPage() {
 
       const targetTime = startMin + startPosition + (progress * startDuration);
       const newTime = Math.min(targetTime, realTime);
-      setCurrentTime(newTime);
+      setCurrentTime(newTime); // Update immediately
 
       if (newTime >= realTime) {
         setIsPlaying(false);
@@ -269,7 +325,10 @@ export default function AgentsPage() {
 
   const handlePlayPause = () => {
     if (currentTime === null) {
-      setCurrentTime(realTime);
+      const now = Date.now();
+      setCurrentTime(now);
+      setFilteredTime(now);
+      lastFilteredUpdateTimeRef.current = now;
     }
     if (!isPlaying) {
       playbackStartTimeRef.current = null;
@@ -281,13 +340,17 @@ export default function AgentsPage() {
 
   const handleSeek = (value: number) => {
     const newTime = timeRange.min + (value / 100) * (timeRange.max - timeRange.min);
-    setCurrentTime(newTime);
+    setCurrentTime(newTime); // Update immediately for scrubbing
     setIsPlaying(false);
     setIsManuallyScrubbed(true);
   };
 
   const handleReset = () => {
-    setCurrentTime(timeRange.min);
+    const resetTime = timeRange.min;
+    setCurrentTime(resetTime);
+    setFilteredTime(resetTime);
+    lastFilteredUpdateTimeRef.current = Date.now();
+    pendingFilteredTimeRef.current = null;
     setIsPlaying(false);
     setIsManuallyScrubbed(false);
   };
@@ -334,10 +397,10 @@ export default function AgentsPage() {
             ← Back to Home
           </Link>
           <h1 className="text-4xl font-bold text-black dark:text-zinc-50 mb-2">
-            Agent Dashboard
+            Interrogate Agents
           </h1>
           <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-4">
-            Real-time activity from all agents
+            Inspect real-time and historical activity from all agents
           </p>
 
           <ViewModeTabs viewMode={viewMode} onViewModeChange={setViewMode} />

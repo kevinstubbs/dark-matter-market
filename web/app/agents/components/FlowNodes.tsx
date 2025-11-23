@@ -10,11 +10,22 @@ export function BuyerNode({ data }: { data: { label: React.ReactNode } }) {
   );
 }
 
+// Custom node component for buyers at bottom (with handle on top)
+export function BuyerBottomNode({ data }: { data: { label: React.ReactNode } }) {
+  return (
+    <div className="px-3 py-2">
+      <Handle type="target" position={Position.Top} style={{ background: '#3b82f6' }} />
+      {data.label}
+    </div>
+  );
+}
+
 // Custom node component for sellers (with handle on top)
 export function SellerNode({ data }: { data: { label: React.ReactNode } }) {
   return (
     <div className="px-3 py-2">
       <Handle type="target" position={Position.Top} style={{ background: '#22c55e' }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: '#22c55e' }} />
       {data.label}
     </div>
   );
@@ -22,6 +33,7 @@ export function SellerNode({ data }: { data: { label: React.ReactNode } }) {
 
 export const nodeTypes = {
   buyer: BuyerNode,
+  buyerBottom: BuyerBottomNode,
   seller: SellerNode,
 };
 

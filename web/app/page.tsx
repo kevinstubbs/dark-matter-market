@@ -39,7 +39,7 @@ export default async function Home() {
               href="/agents"
               className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
             >
-              View Agent Dashboard →
+              Interrogate Agents→
             </a>
           </div>
         </div>

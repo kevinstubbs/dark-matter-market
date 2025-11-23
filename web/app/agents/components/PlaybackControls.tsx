@@ -3,11 +3,11 @@ import { formatTime } from './utils';
 interface PlaybackControlsProps {
   isPlaying: boolean;
   currentTime: number | null;
-  playbackSpeed: 0.5 | 1 | 2;
+  playbackSpeed: number;
   timeRange: { min: number; max: number };
   onPlayPause: () => void;
   onReset: () => void;
-  onSpeedChange: (speed: 0.5 | 1 | 2) => void;
+  onSpeedChange: (speed: number) => void;
   onSeek: (value: number) => void;
 }
 
@@ -44,7 +44,7 @@ export function PlaybackControls({
         <div className="flex flex-col items-center gap-1 w-full">
           <span className="text-xs text-zinc-600 dark:text-zinc-400">Speed</span>
           <div className="flex flex-row gap-1 w-full">
-            {([0.5, 1, 2] as const).map((speed) => (
+            {([0.5, 1, 2, 10] as const).map((speed) => (
               <button
                 key={speed}
                 onClick={() => onSpeedChange(speed)}
@@ -85,18 +85,18 @@ export function PlaybackControls({
               </div>
             </div>
             <div className="flex-1 flex items-center w-full relative">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={currentTime === null ? 0 : ((currentTime - timeRange.min) / (timeRange.max - timeRange.min || 1)) * 100}
-                onChange={(e) => onSeek(parseFloat(e.target.value))}
-                className="w-2 h-[200px] bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
-                style={{
-                  writingMode: 'vertical-lr',
-                  transform: 'rotate(180deg)',
-                }}
-              />
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={currentTime === null ? 0 : ((currentTime - timeRange.min) / (timeRange.max - timeRange.min || 1)) * 100}
+                        onChange={(e) => onSeek(parseFloat(e.target.value))}
+                        className="w-2 h-[200px] bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
+                        style={{
+                          writingMode: 'vertical-lr',
+                          transform: 'rotate(180deg)',
+                        }}
+                      />
             </div>
           </div>
         </div>

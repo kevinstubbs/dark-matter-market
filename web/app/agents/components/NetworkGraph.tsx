@@ -1,11 +1,36 @@
 'use client';
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import { ReactFlow, Node, Edge, Background, Controls } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { AgentInfo, HoveredEdge } from './types';
 import { MESSAGE_TYPE_EDGE_COLORS } from './constants';
 import { nodeTypes } from './FlowNodes';
+
+// Create a hash of the data that determines nodes and edges
+function createDataHash(
+  agents: AgentInfo[],
+  getLastMessageTypeBetweenAgents: (buyerId: string, sellerId: string) => string | null,
+  getA2AMessageCount: (buyerId: string, sellerId: string) => number
+): string {
+  const buyers = agents.filter(a => a.type === 'buyer');
+  const sellers = agents.filter(a => a.type === 'seller');
+  
+  // Hash agents (id, name, type, port, walletAddress)
+  const agentsHash = agents.map(a => `${a.id}:${a.name}:${a.type}:${a.port}:${a.walletAddress || ''}`).join('|');
+  
+  // Hash edge data (message types and counts)
+  const edgesData: string[] = [];
+  buyers.forEach(buyer => {
+    sellers.forEach(seller => {
+      const messageType = getLastMessageTypeBetweenAgents(buyer.id, seller.id);
+      const count = getA2AMessageCount(buyer.id, seller.id);
+      edgesData.push(`${buyer.id}-${seller.id}:${messageType || ''}:${count}`);
+    });
+  });
+  
+  return `${agentsHash}||${edgesData.join('|')}`;
+}
 
 interface NetworkGraphProps {
   agents: AgentInfo[];
@@ -30,27 +55,42 @@ export function NetworkGraph({
   getLastMessageTypeBetweenAgents,
   getA2AMessageCount,
 }: NetworkGraphProps) {
+  // Store previous nodes, edges, and hash
+  const previousNodesRef = useRef<Node[]>([]);
+  const previousEdgesRef = useRef<Edge[]>([]);
+  const previousHashRef = useRef<string>('');
+
   // Generate React Flow nodes and edges
   const { nodes, edges } = useMemo(() => {
+    // Create hash of current data
+    const currentHash = createDataHash(agents, getLastMessageTypeBetweenAgents, getA2AMessageCount);
+    
+    // If hash hasn't changed, return previous nodes and edges
+    if (currentHash === previousHashRef.current) {
+      return { nodes: previousNodesRef.current, edges: previousEdgesRef.current };
+    }
+    
+    // Hash changed, create new nodes and edges
     const buyers = agents.filter(a => a.type === 'buyer');
     const sellers = agents.filter(a => a.type === 'seller');
 
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
 
-    // Position buyers on top (spread horizontally)
-    buyers.forEach((buyer, idx) => {
+    // Position 1st buyer on top (centered)
+    if (buyers.length > 0) {
+      const firstBuyer = buyers[0];
       flowNodes.push({
-        id: buyer.id,
+        id: firstBuyer.id,
         type: 'buyer',
-        position: { x: 200 + idx * 800, y: 50 },
+        position: { x: 400, y: 50 },
         data: {
           label: (
             <div className="text-center">
-              <div className="font-semibold text-black">{buyer.name}</div>
-              <div className="text-xs text-black">Port: {buyer.port}</div>
-              {buyer.walletAddress && (
-                <div className="text-xs text-black">Wallet: {buyer.walletAddress}</div>
+              <div className="font-semibold text-black">{firstBuyer.name}</div>
+              <div className="text-xs text-black">Port: {firstBuyer.port}</div>
+              {firstBuyer.walletAddress && (
+                <div className="text-xs text-black">Wallet: {firstBuyer.walletAddress}</div>
               )}
             </div>
           ),
@@ -67,14 +107,14 @@ export function NetworkGraph({
         draggable: false,
         connectable: false,
       });
-    });
+    }
 
-    // Position sellers on bottom (spread horizontally)
+    // Position sellers in the middle (spread horizontally)
     sellers.forEach((seller, idx) => {
       flowNodes.push({
         id: seller.id,
         type: 'seller',
-        position: { x: 200 + idx * 300, y: 500 },
+        position: { x: 200 + idx * 300, y: 300 },
         data: {
           label: (
             <div className="text-center">
@@ -100,8 +140,40 @@ export function NetworkGraph({
       });
     });
 
-    // Connect all buyers to all sellers (many-to-many)
-    buyers.forEach(buyer => {
+    // Position 2nd buyer on bottom (centered)
+    if (buyers.length > 1) {
+      const secondBuyer = buyers[1];
+      flowNodes.push({
+        id: secondBuyer.id,
+        type: 'buyerBottom',
+        position: { x: 1200, y: 550 },
+        data: {
+          label: (
+            <div className="text-center">
+              <div className="font-semibold text-black">{secondBuyer.name}</div>
+              <div className="text-xs text-black">Port: {secondBuyer.port}</div>
+              {secondBuyer.walletAddress && (
+                <div className="text-xs text-black">Wallet: {secondBuyer.walletAddress}</div>
+              )}
+            </div>
+          ),
+        },
+        style: {
+          background: '#dbeafe',
+          border: '2px solid #3b82f6',
+          borderRadius: '8px',
+          padding: '10px',
+          minWidth: '150px',
+          color: '#1e40af',
+          cursor: 'pointer',
+        },
+        draggable: false,
+        connectable: false,
+      });
+    }
+
+    // Connect buyers to sellers
+    buyers.forEach((buyer, buyerIdx) => {
       sellers.forEach(seller => {
         const lastMessageType = getLastMessageTypeBetweenAgents(buyer.id, seller.id);
         const edgeColor = lastMessageType
@@ -109,10 +181,16 @@ export function NetworkGraph({
           : '#94a3b8';
         const messageCount = getA2AMessageCount(buyer.id, seller.id);
 
+        // First buyer (top) connects to sellers (top to bottom)
+        // Second buyer (bottom) connects from sellers (bottom to top)
+        const isSecondBuyer = buyerIdx === 1;
+        const source = isSecondBuyer ? seller.id : buyer.id;
+        const target = isSecondBuyer ? buyer.id : seller.id;
+
         flowEdges.push({
           id: `${buyer.id}-${seller.id}`,
-          source: buyer.id,
-          target: seller.id,
+          source: source,
+          target: target,
           animated: true,
           data: {
             messageType: lastMessageType,
@@ -125,18 +203,26 @@ export function NetworkGraph({
           label: messageCount > 0 ? `${messageCount}` : '',
           labelStyle: {
             fill: edgeColor,
-            fontWeight: 600,
-            fontSize: 12,
+            fontWeight: 800,
+            fontSize: 24,
             cursor: 'pointer',
           },
           labelBgStyle: {
             fill: '#ffffff',
-            fillOpacity: 0.8,
+            fillOpacity: 1,
             cursor: 'pointer',
+            padding: '4px 8px',
+            rx: 4,
+            ry: 4,
           },
         });
       });
     });
+
+    // Store for next comparison
+    previousNodesRef.current = flowNodes;
+    previousEdgesRef.current = flowEdges;
+    previousHashRef.current = currentHash;
 
     return { nodes: flowNodes, edges: flowEdges };
   }, [agents, getLastMessageTypeBetweenAgents, getA2AMessageCount]);
