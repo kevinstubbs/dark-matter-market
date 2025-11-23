@@ -4,9 +4,12 @@ import { DefaultRequestHandler } from '@a2a-js/sdk/server';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { A2AExpressApp } from '@a2a-js/sdk/server/express';
 import { config } from 'dotenv';
+import { Client, PrivateKey, AccountBalanceQuery } from '@hashgraph/sdk';
+import { HederaLangchainToolkit, coreQueriesPlugin } from 'hedera-agent-kit';
 import { BuyerExecutor } from './executor.js';
 import { getBuyerConfig } from './preferences.js';
-import { AgentLogger } from '@dmm/agents-shared';
+import { AgentLogger, getHederaSecret } from '@dmm/agents-shared';
+import { resolve } from 'path';
 
 // Load environment variables (for ANTHROPIC_API_KEY, etc.)
 config();
@@ -58,6 +61,54 @@ const logger = new AgentLogger(buyerConfig.id, websiteUrl);
 // Clear previous messages on startup
 await logger.clearMessages();
 await logger.log(`Buyer Agent "${buyerConfig.name}" starting...`, 'agent-started');
+
+// Initialize Hedera client and check balance
+try {
+  // Get the config file path to resolve the env file (same logic as config loader)
+  const configFile = configPath || process.env.BUYER_CONFIG || 'buyer.json';
+  const fullConfigPath = resolve(process.cwd(), configFile);
+  
+  // Load Hedera secret from env file
+  const hederaSecret = getHederaSecret(buyerConfig.envFile, fullConfigPath);
+  
+  if (!hederaSecret) {
+    await logger.log(`Warning: No Hedera secret found in ${buyerConfig.envFile}. Hedera features will be unavailable.`, 'error');
+  } else {
+    // Initialize Hedera client (Testnet by default)
+    const hederaClient = Client.forTestnet().setOperator(
+      buyerConfig.walletAddress,
+      PrivateKey.fromStringECDSA(hederaSecret),
+    );
+    
+    // Log wallet ID
+    await logger.log(`Hedera Wallet ID: ${buyerConfig.walletAddress}`, 'info');
+    
+    // Check balance using AccountBalanceQuery
+    try {
+      const balanceQuery = new AccountBalanceQuery()
+        .setAccountId(buyerConfig.walletAddress);
+      const balance = await balanceQuery.execute(hederaClient);
+      const hbarBalance = balance.hbars.toString();
+      await logger.log(`Hedera Balance: ${hbarBalance} HBAR`, 'info');
+    } catch (balanceError) {
+      await logger.log(`Failed to query balance: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`, 'error');
+    }
+    
+    // Initialize Hedera AgentKit (for future use)
+    const hederaAgentToolkit = new HederaLangchainToolkit({
+      client: hederaClient,
+      configuration: {
+        plugins: [coreQueriesPlugin]
+      },
+    });
+    
+    // Store toolkit globally for future use (if needed)
+    // Note: We're keeping A2A for now, but AgentKit is available for Hedera operations
+    await logger.log(`Hedera AgentKit initialized successfully`, 'info');
+  }
+} catch (hederaError) {
+  await logger.log(`Error initializing Hedera: ${hederaError instanceof Error ? hederaError.message : String(hederaError)}`, 'error');
+}
 
 // Create agent card
 const agentCard: AgentCard = {

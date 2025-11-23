@@ -7,6 +7,7 @@ export interface AgentInfo {
   name: string;
   type: 'buyer' | 'seller';
   port: number;
+  walletAddress?: string;
 }
 
 export async function GET() {
@@ -52,6 +53,7 @@ export async function GET() {
               name: config.name,
               type: 'buyer',
               port: config.port,
+              walletAddress: config.walletAddress,
             });
           }
         } catch (e) {
@@ -76,6 +78,7 @@ export async function GET() {
               name: config.name,
               type: 'seller',
               port: config.port,
+              walletAddress: config.walletAddress,
             });
           }
         } catch (e) {

@@ -19,6 +19,7 @@ interface AgentInfo {
   name: string;
   type: 'buyer' | 'seller';
   port: number;
+  walletAddress?: string;
 }
 
 const MESSAGE_TYPE_COLORS: Record<string, string> = {
@@ -246,6 +247,9 @@ export default function AgentsPage() {
             <div className="text-center">
               <div className="font-semibold text-black">{buyer.name}</div>
               <div className="text-xs text-black">Port: {buyer.port}</div>
+              {buyer.walletAddress && (
+                <div className="text-xs text-black">Wallet: {buyer.walletAddress}</div>
+              )}
             </div>
           ),
         },
@@ -274,6 +278,9 @@ export default function AgentsPage() {
             <div className="text-center">
               <div className="font-semibold text-black">{seller.name}</div>
               <div className="text-xs text-black">Port: {seller.port}</div>
+              {seller.walletAddress && (
+                <div className="text-xs text-black">Wallet: {seller.walletAddress}</div>
+              )}
             </div>
           ),
         },
@@ -607,6 +614,9 @@ export default function AgentsPage() {
                     </div>
                     <p className="text-sm text-zinc-600 dark:text-zinc-400">
                       ID: {agent.id} | Port: {agent.port}
+                      {agent.walletAddress && (
+                        <> | Wallet: {agent.walletAddress}</>
+                      )}
                     </p>
                   </div>
 
@@ -793,6 +803,9 @@ export default function AgentsPage() {
                   </div>
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
                     ID: {selectedAgent.id} | Port: {selectedAgent.port}
+                    {selectedAgent.walletAddress && (
+                      <> | Wallet: {selectedAgent.walletAddress}</>
+                    )}
                   </p>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
