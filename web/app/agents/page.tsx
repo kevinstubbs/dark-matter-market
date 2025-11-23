@@ -96,7 +96,7 @@ export default function AgentsPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<{ source: string; target: string } | null>(null);
   const [hoveredEdge, setHoveredEdge] = useState<{ id: string; messageType: string | null; x: number; y: number } | null>(null);
-  
+
   // Playback controls
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState<number | null>(null); // Timestamp in milliseconds
@@ -136,12 +136,12 @@ export default function AgentsPage() {
       const messagesMap: Record<string, AgentMessage[]> = {};
       results.forEach(({ agentId, messages }) => {
         // Sort by timestamp (oldest first) since Redis returns newest first
-        messagesMap[agentId] = messages.sort((a: AgentMessage, b: AgentMessage) => 
+        messagesMap[agentId] = messages.sort((a: AgentMessage, b: AgentMessage) =>
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
       });
       setMessages(messagesMap);
-      
+
       // Initialize currentTime to real time if not set
       if (currentTime === null) {
         setCurrentTime(Date.now());
@@ -200,17 +200,17 @@ export default function AgentsPage() {
   const getLastMessageTypeBetweenAgents = useCallback((buyerId: string, sellerId: string): string | null => {
     const buyerMessages = filteredMessages[buyerId] || [];
     const sellerMessages = filteredMessages[sellerId] || [];
-    
+
     // Find messages that are between these two agents
     const relevantMessages = [
       ...buyerMessages.filter(m => m.targetAgentId === sellerId),
       ...sellerMessages.filter(m => m.targetAgentId === buyerId),
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    
+
     if (relevantMessages.length > 0) {
       return relevantMessages[0].type;
     }
-    
+
     return null;
   }, [filteredMessages]);
 
@@ -218,13 +218,13 @@ export default function AgentsPage() {
   const getA2AMessageCount = useCallback((buyerId: string, sellerId: string): number => {
     const buyerMessages = filteredMessages[buyerId] || [];
     const sellerMessages = filteredMessages[sellerId] || [];
-    
+
     // Count A2A messages where targetAgentId matches
     const count = [
       ...buyerMessages.filter(m => m.isA2AMessage && m.targetAgentId === sellerId),
       ...sellerMessages.filter(m => m.isA2AMessage && m.targetAgentId === buyerId),
     ].length;
-    
+
     return count;
   }, [filteredMessages]);
 
@@ -302,11 +302,11 @@ export default function AgentsPage() {
     buyers.forEach(buyer => {
       sellers.forEach(seller => {
         const lastMessageType = getLastMessageTypeBetweenAgents(buyer.id, seller.id);
-        const edgeColor = lastMessageType 
+        const edgeColor = lastMessageType
           ? (MESSAGE_TYPE_EDGE_COLORS[lastMessageType] || '#94a3b8')
           : '#94a3b8';
         const messageCount = getA2AMessageCount(buyer.id, seller.id);
-        
+
         flowEdges.push({
           id: `${buyer.id}-${seller.id}`,
           source: buyer.id,
@@ -316,8 +316,8 @@ export default function AgentsPage() {
           data: {
             messageType: lastMessageType,
           },
-          style: { 
-            stroke: edgeColor, 
+          style: {
+            stroke: edgeColor,
             strokeWidth: 2,
             cursor: 'pointer', // Show pointer cursor on edge
           },
@@ -350,7 +350,7 @@ export default function AgentsPage() {
     const target = event.target as HTMLElement;
     // React Flow labels are clickable, so we can check for label-related classes
     if (target && (
-      target.classList.contains('react-flow__edge-label') || 
+      target.classList.contains('react-flow__edge-label') ||
       target.closest('.react-flow__edge-label') ||
       target.classList.contains('react-flow__edge-labelbg') ||
       target.closest('.react-flow__edge-labelbg')
@@ -408,12 +408,12 @@ export default function AgentsPage() {
   const playbackStartTimeRangeMinRef = useRef<number | null>(null);
   const playbackStartTimeRangeMaxRef = useRef<number | null>(null);
   const currentTimeRef = useRef<number | null>(null);
-  
+
   // Keep currentTimeRef in sync with currentTime
   useEffect(() => {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
-  
+
   useEffect(() => {
     if (!isPlaying) {
       playbackStartTimeRef.current = null;
@@ -422,14 +422,14 @@ export default function AgentsPage() {
       playbackStartTimeRangeMaxRef.current = null;
       return;
     }
-    
+
     if (currentTimeRef.current === null) {
       return;
     }
-    
+
     const duration = timeRange.max - timeRange.min;
     if (duration <= 0) return;
-    
+
     // Only initialize start time/position when playback first starts
     if (playbackStartTimeRef.current === null) {
       playbackStartTimeRef.current = Date.now();
@@ -437,25 +437,25 @@ export default function AgentsPage() {
       playbackStartTimeRangeMinRef.current = timeRange.min; // Store the min at start of playback
       playbackStartTimeRangeMaxRef.current = timeRange.max; // Store the max at start of playback
     }
-    
+
     const startTime = playbackStartTimeRef.current;
     const startPosition = playbackStartPositionRef.current!;
     const startMin = playbackStartTimeRangeMinRef.current!;
     const startMax = playbackStartTimeRangeMaxRef.current!;
     const startDuration = startMax - startMin;
     const playbackDuration = startDuration / playbackSpeed; // Adjust duration based on speed
-    
+
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const progress = elapsed / playbackDuration;
-      
+
       // Calculate target time based on playback using the original min and max
       const targetTime = startMin + startPosition + (progress * startDuration);
-      
+
       // Don't exceed current real time
       const newTime = Math.min(targetTime, realTime);
       setCurrentTime(newTime);
-      
+
       // If we've reached real time, stop playing
       if (newTime >= realTime) {
         setIsPlaying(false);
@@ -465,7 +465,7 @@ export default function AgentsPage() {
         playbackStartTimeRangeMaxRef.current = null;
       }
     }, 16); // ~60fps updates
-    
+
     return () => clearInterval(interval);
   }, [isPlaying, playbackSpeed, realTime]); // Only depend on isPlaying, playbackSpeed, and realTime
 
@@ -502,20 +502,20 @@ export default function AgentsPage() {
   const getMessagesBetweenAgents = useCallback((sourceId: string, targetId: string): AgentMessage[] => {
     const sourceMessages = filteredMessages[sourceId] || [];
     const targetMessages = filteredMessages[targetId] || [];
-    
+
     // Filter messages where targetAgentId matches the other agent
     const filtered = [
       ...sourceMessages.filter((m: AgentMessage) => m.targetAgentId === targetId),
       ...targetMessages.filter((m: AgentMessage) => m.targetAgentId === sourceId),
     ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    
+
     return filtered;
   }, [filteredMessages]);
 
-  const edgeMessages = selectedEdge 
+  const edgeMessages = selectedEdge
     ? getMessagesBetweenAgents(selectedEdge.source, selectedEdge.target)
     : [];
-  
+
   const edgeSourceAgent = selectedEdge ? agents.find(a => a.id === selectedEdge.source) : null;
   const edgeTargetAgent = selectedEdge ? agents.find(a => a.id === selectedEdge.target) : null;
 
@@ -548,21 +548,19 @@ export default function AgentsPage() {
           <div className="flex gap-2 border-b border-zinc-200 dark:border-zinc-800 mb-4">
             <button
               onClick={() => setViewMode('boxes')}
-              className={`px-4 py-2 font-medium transition-colors ${
-                viewMode === 'boxes'
-                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50'
-              }`}
+              className={`px-4 py-2 font-medium transition-colors ${viewMode === 'boxes'
+                ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50'
+                }`}
             >
               Boxes View
             </button>
             <button
               onClick={() => setViewMode('network')}
-              className={`px-4 py-2 font-medium transition-colors ${
-                viewMode === 'network'
-                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50'
-              }`}
+              className={`px-4 py-2 font-medium transition-colors ${viewMode === 'network'
+                ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50'
+                }`}
             >
               Network View
             </button>
@@ -590,8 +588,8 @@ export default function AgentsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {agents.map(agent => {
               const agentMessages = filteredMessages[agent.id] || [];
-              const typeColor = agent.type === 'buyer' 
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' 
+              const typeColor = agent.type === 'buyer'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
                 : 'border-green-500 bg-green-50 dark:bg-green-950/20';
 
               return (
@@ -604,11 +602,10 @@ export default function AgentsPage() {
                       <h2 className="text-xl font-semibold text-black dark:text-zinc-50">
                         {agent.name}
                       </h2>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        agent.type === 'buyer'
-                          ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200'
-                          : 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200'
-                      }`}>
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${agent.type === 'buyer'
+                        ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200'
+                        : 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200'
+                        }`}>
                         {agent.type}
                       </span>
                     </div>
@@ -632,9 +629,8 @@ export default function AgentsPage() {
                           className="p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`text-xs px-2 py-0.5 rounded ${
-                              MESSAGE_TYPE_COLORS[msg.type] || MESSAGE_TYPE_COLORS['info']
-                            }`}>
+                            <span className={`text-xs px-2 py-0.5 rounded ${MESSAGE_TYPE_COLORS[msg.type] || MESSAGE_TYPE_COLORS['info']
+                              }`}>
                               {msg.type}
                             </span>
                             <span className="text-xs text-zinc-500 dark:text-zinc-500">
@@ -686,11 +682,10 @@ export default function AgentsPage() {
                       <button
                         key={speed}
                         onClick={() => setPlaybackSpeed(speed)}
-                        className={`w-full px-2 py-1 text-xs rounded font-medium transition-colors ${
-                          playbackSpeed === speed
-                            ? 'bg-blue-600 text-white dark:bg-blue-500'
-                            : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700'
-                        }`}
+                        className={`w-full px-2 py-1 text-xs rounded font-medium transition-colors ${playbackSpeed === speed
+                          ? 'bg-blue-600 text-white dark:bg-blue-500'
+                          : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700'
+                          }`}
                       >
                         {speed}x
                       </button>
@@ -700,40 +695,43 @@ export default function AgentsPage() {
 
                 {/* Time Slider - Vertical */}
                 <div className="flex-1 flex flex-col items-center justify-center w-full relative">
-                  {/* Max label at top, offset horizontally */}
-                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full mb-1">
-                    <span className="text-xs text-zinc-500 dark:text-zinc-500 whitespace-nowrap">
-                      {formatTime(new Date(timeRange.max).toISOString())}
-                    </span>
-                  </div>
-                  
+
                   {/* Current time above the bar */}
                   <div className="mb-2">
                     <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                       {currentTime !== null && formatTime(new Date(currentTime).toISOString())}
                     </span>
                   </div>
-                  
+
                   {/* Slider */}
-                  <div className="flex-1 flex items-center justify-center w-full relative">
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={currentTime === null ? 0 : ((currentTime - timeRange.min) / (timeRange.max - timeRange.min || 1)) * 100}
-                      onChange={(e) => handleSeek(parseFloat(e.target.value))}
-                      className="w-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
-                      style={{ 
-                        writingMode: 'vertical-lr',
-                        transform: 'rotate(180deg)',
-                      }}
-                    />
-                    
-                    {/* Min label at bottom, offset horizontally */}
-                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full mt-1">
-                      <span className="text-xs text-zinc-500 dark:text-zinc-500 whitespace-nowrap">
-                        {formatTime(new Date(timeRange.min).toISOString())}
-                      </span>
+                  <div className="flex flex-1 w-full flex-row gap-x-4">
+                    <div className="flex flex-col justify-between py-0.5">
+                      {/* Max label at top, offset horizontally */}
+                      <div>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-500 whitespace-nowrap">
+                          {formatTime(new Date(timeRange.max).toISOString())} -
+                        </span>
+                      </div>
+                      {/* Min label at bottom, offset horizontally */}
+                      <div>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-500 whitespace-nowrap">
+                          {formatTime(new Date(timeRange.min).toISOString())} -
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-1 flex items-center w-full relative">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={currentTime === null ? 0 : ((currentTime - timeRange.min) / (timeRange.max - timeRange.min || 1)) * 100}
+                        onChange={(e) => handleSeek(parseFloat(e.target.value))}
+                        className="w-2 h-[200px] bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-600 dark:accent-blue-500"
+                        style={{
+                          writingMode: 'vertical-lr',
+                          transform: 'rotate(180deg)',
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -765,7 +763,6 @@ export default function AgentsPage() {
                 >
                   <Background />
                   <Controls />
-                  <MiniMap />
                 </ReactFlow>
               </div>
 
@@ -783,130 +780,46 @@ export default function AgentsPage() {
               )}
 
               {/* Agent Logs Panel */}
-            {selectedAgent && (
-              <div className="absolute top-4 right-4 w-96 h-[350px] bg-white dark:bg-zinc-900 border-2 border-zinc-300 dark:border-zinc-700 rounded-lg shadow-xl z-10 flex flex-col">
-                <div className={`p-4 border-b-2 flex-shrink-0 ${
-                  selectedAgent.type === 'buyer'
+              {selectedAgent && (
+                <div className="absolute top-4 right-4 w-96 h-[350px] bg-white dark:bg-zinc-900 border-2 border-zinc-300 dark:border-zinc-700 rounded-lg shadow-xl z-10 flex flex-col">
+                  <div className={`p-4 border-b-2 flex-shrink-0 ${selectedAgent.type === 'buyer'
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
                     : 'border-green-500 bg-green-50 dark:bg-green-950/20'
-                }`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-semibold text-black dark:text-zinc-50">
-                      {selectedAgent.name}
-                    </h3>
-                    <button
-                      onClick={() => setSelectedAgentId(null)}
-                      className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    ID: {selectedAgent.id} | Port: {selectedAgent.port}
-                    {selectedAgent.walletAddress && (
-                      <> | Wallet: {selectedAgent.walletAddress}</>
-                    )}
-                  </p>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-                  {selectedMessages.length === 0 ? (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-500 italic">
-                      No messages yet...
-                    </p>
-                  ) : (
-                    selectedMessages.map((msg, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950"
+                    }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-black dark:text-zinc-50">
+                        {selectedAgent.name}
+                      </h3>
+                      <button
+                        onClick={() => setSelectedAgentId(null)}
+                        className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            MESSAGE_TYPE_COLORS[msg.type] || MESSAGE_TYPE_COLORS['info']
-                          }`}>
-                            {msg.type}
-                          </span>
-                          <span className="text-xs text-zinc-500 dark:text-zinc-500">
-                            {formatTime(msg.timestamp)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                          {msg.message}
-                        </p>
-                        {msg.targetAgentId && (
-                          <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-1">
-                            → {msg.targetAgentId}
-                          </p>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Edge Messages Panel */}
-            {selectedEdge && edgeSourceAgent && edgeTargetAgent && (
-              <div className="absolute top-4 right-4 w-96 h-[350px] bg-white dark:bg-zinc-900 border-2 border-zinc-300 dark:border-zinc-700 rounded-lg shadow-xl z-10 flex flex-col">
-                <div className="p-4 border-b-2 flex-shrink-0 border-purple-500 bg-purple-50 dark:bg-purple-950/20">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-semibold text-black dark:text-zinc-50">
-                      Messages Between
-                    </h3>
-                    <button
-                      onClick={() => setSelectedEdge(null)}
-                      className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                      <span className={`font-semibold ${edgeSourceAgent.type === 'buyer' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {edgeSourceAgent.name}
-                      </span>
-                      {' ↔ '}
-                      <span className={`font-semibold ${edgeTargetAgent.type === 'buyer' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {edgeTargetAgent.name}
-                      </span>
-                    </p>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-500">
-                      {edgeMessages.length} message{edgeMessages.length !== 1 ? 's' : ''}
+                        ✕
+                      </button>
+                    </div>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      ID: {selectedAgent.id} | Port: {selectedAgent.port}
+                      {selectedAgent.walletAddress && (
+                        <> | Wallet: {selectedAgent.walletAddress}</>
+                      )}
                     </p>
                   </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-                  {edgeMessages.length === 0 ? (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-500 italic">
-                      No messages between these agents yet...
-                    </p>
-                  ) : (
-                    edgeMessages.map((msg, idx) => {
-                      const isFromSource = msg.agentId === selectedEdge.source;
-                      const agent = isFromSource ? edgeSourceAgent : edgeTargetAgent;
-                      return (
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+                    {selectedMessages.length === 0 ? (
+                      <p className="text-sm text-zinc-500 dark:text-zinc-500 italic">
+                        No messages yet...
+                      </p>
+                    ) : (
+                      selectedMessages.map((msg, idx) => (
                         <div
                           key={idx}
-                          className={`p-2 rounded border ${
-                            isFromSource
-                              ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20'
-                              : 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20'
-                          }`}
+                          className="p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950"
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs font-medium ${
-                                isFromSource
-                                  ? 'text-blue-700 dark:text-blue-300'
-                                  : 'text-green-700 dark:text-green-300'
+                            <span className={`text-xs px-2 py-0.5 rounded ${MESSAGE_TYPE_COLORS[msg.type] || MESSAGE_TYPE_COLORS['info']
                               }`}>
-                                {agent?.name}
-                              </span>
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                MESSAGE_TYPE_COLORS[msg.type] || MESSAGE_TYPE_COLORS['info']
-                              }`}>
-                                {msg.type}
-                              </span>
-                            </div>
+                              {msg.type}
+                            </span>
                             <span className="text-xs text-zinc-500 dark:text-zinc-500">
                               {formatTime(msg.timestamp)}
                             </span>
@@ -914,13 +827,92 @@ export default function AgentsPage() {
                           <p className="text-sm text-zinc-700 dark:text-zinc-300">
                             {msg.message}
                           </p>
+                          {msg.targetAgentId && (
+                            <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-1">
+                              → {msg.targetAgentId}
+                            </p>
+                          )}
                         </div>
-                      );
-                    })
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Edge Messages Panel */}
+              {selectedEdge && edgeSourceAgent && edgeTargetAgent && (
+                <div className="absolute top-4 right-4 w-96 h-[350px] bg-white dark:bg-zinc-900 border-2 border-zinc-300 dark:border-zinc-700 rounded-lg shadow-xl z-10 flex flex-col">
+                  <div className="p-4 border-b-2 flex-shrink-0 border-purple-500 bg-purple-50 dark:bg-purple-950/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-black dark:text-zinc-50">
+                        Messages Between
+                      </h3>
+                      <button
+                        onClick={() => setSelectedEdge(null)}
+                        className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                        <span className={`font-semibold ${edgeSourceAgent.type === 'buyer' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
+                          {edgeSourceAgent.name}
+                        </span>
+                        {' ↔ '}
+                        <span className={`font-semibold ${edgeTargetAgent.type === 'buyer' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
+                          {edgeTargetAgent.name}
+                        </span>
+                      </p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500">
+                        {edgeMessages.length} message{edgeMessages.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+                    {edgeMessages.length === 0 ? (
+                      <p className="text-sm text-zinc-500 dark:text-zinc-500 italic">
+                        No messages between these agents yet...
+                      </p>
+                    ) : (
+                      edgeMessages.map((msg, idx) => {
+                        const isFromSource = msg.agentId === selectedEdge.source;
+                        const agent = isFromSource ? edgeSourceAgent : edgeTargetAgent;
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-2 rounded border ${isFromSource
+                              ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20'
+                              : 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20'
+                              }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-medium ${isFromSource
+                                  ? 'text-blue-700 dark:text-blue-300'
+                                  : 'text-green-700 dark:text-green-300'
+                                  }`}>
+                                  {agent?.name}
+                                </span>
+                                <span className={`text-xs px-2 py-0.5 rounded ${MESSAGE_TYPE_COLORS[msg.type] || MESSAGE_TYPE_COLORS['info']
+                                  }`}>
+                                  {msg.type}
+                                </span>
+                              </div>
+                              <span className="text-xs text-zinc-500 dark:text-zinc-500">
+                                {formatTime(msg.timestamp)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                              {msg.message}
+                            </p>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
