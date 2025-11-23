@@ -13,6 +13,7 @@ import { handleIncomingMessage, handleCompetingOfferResponse } from './message-h
 import { AgentLogger, getAgentIdFromUrl } from '@dmm/agents-shared';
 import { getHederaSecret } from '@dmm/agents-shared';
 import { resolve } from 'path';
+import { initializeAgentManager } from './negotiation.js';
 
 // Load environment variables
 config();
@@ -25,6 +26,9 @@ let globalUserContext: UserContext | null = null;
 
 // Store logger globally for use in executor and message handler
 let globalLogger: AgentLogger | null = null;
+
+// Store Hedera agent toolkit globally for use in executor and message handler
+let globalHederaAgentToolkit: HederaLangchainToolkit | undefined;
 
 async function main() {
   // Load seller config from JSON file
@@ -70,41 +74,67 @@ async function main() {
     if (!hederaSecret) {
       await globalLogger.log(`Warning: No Hedera secret found in ${sellerConfig.envFile}. Hedera features will be unavailable.`, 'error');
     } else {
-      // Initialize Hedera client (Testnet by default)
-      const hederaClient = Client.forTestnet().setOperator(
-        sellerConfig.walletAddress,
-        PrivateKey.fromStringECDSA(hederaSecret),
-      );
-      
-      // Log wallet ID
-      await globalLogger.log(`Hedera Wallet ID: ${sellerConfig.walletAddress}`, 'info');
-      
-      // Check balance using AccountBalanceQuery
-      try {
-        const balanceQuery = new AccountBalanceQuery()
-          .setAccountId(sellerConfig.walletAddress);
-        const balance = await balanceQuery.execute(hederaClient);
-        sellerBalance = balance.hbars.toString();
-        await globalLogger.log(`Hedera Balance: ${sellerBalance} HBAR`, 'info');
-      } catch (balanceError) {
-        await globalLogger.log(`Failed to query balance: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`, 'error');
+      // Validate and clean the secret key
+      let secretKey: string;
+      if (typeof hederaSecret !== 'string') {
+        await globalLogger.log(`Error: Hedera secret is not a string (got ${typeof hederaSecret}). Hedera features will be unavailable.`, 'error');
+        secretKey = '';
+      } else {
+        secretKey = hederaSecret.trim();
+        if (!secretKey) {
+          await globalLogger.log(`Error: Hedera secret is empty. Hedera features will be unavailable.`, 'error');
+        }
       }
       
-      // Initialize Hedera AgentKit (for future use)
-      const hederaAgentToolkit = new HederaLangchainToolkit({
-        client: hederaClient,
-        configuration: {
-          plugins: [coreQueriesPlugin]
-        },
-      });
+      if (secretKey) {
+        try {
+          // Initialize Hedera client (Testnet by default)
+          const hederaClient = Client.forTestnet().setOperator(
+            sellerConfig.walletAddress,
+            PrivateKey.fromStringECDSA(secretKey),
+          );
       
-      // Store toolkit globally for future use (if needed)
-      // Note: We're keeping A2A for now, but AgentKit is available for Hedera operations
-      await globalLogger.log(`Hedera AgentKit initialized successfully`, 'info');
+          // Log wallet ID
+          await globalLogger.log(`Hedera Wallet ID: ${sellerConfig.walletAddress}`, 'info');
+          
+          // Check balance using AccountBalanceQuery
+          try {
+            const balanceQuery = new AccountBalanceQuery()
+              .setAccountId(sellerConfig.walletAddress);
+            const balance = await balanceQuery.execute(hederaClient);
+            sellerBalance = balance.hbars.toString();
+            await globalLogger.log(`Hedera Balance: ${sellerBalance} HBAR`, 'info');
+          } catch (balanceError) {
+            await globalLogger.log(`Failed to query balance: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`, 'error');
+          }
+          
+          // Initialize Hedera AgentKit for use with Langchain agent
+          globalHederaAgentToolkit = new HederaLangchainToolkit({
+            client: hederaClient,
+            configuration: {
+              plugins: [coreQueriesPlugin]
+            },
+          });
+          
+          await globalLogger.log(`Hedera AgentKit initialized successfully`, 'info');
+          
+          // Initialize the agent manager with Hedera tools
+          initializeAgentManager(globalHederaAgentToolkit);
+        } catch (keyError) {
+          await globalLogger.log(`Error creating Hedera private key: ${keyError instanceof Error ? keyError.message : String(keyError)}. Please check that HEDERA_SECRET in ${sellerConfig.envFile} is a valid hex-encoded private key.`, 'error');
+        }
+      } else {
+        // Initialize agent manager without Hedera tools
+        initializeAgentManager();
+      }
     }
   } catch (hederaError) {
     await globalLogger.log(`Error initializing Hedera: ${hederaError instanceof Error ? hederaError.message : String(hederaError)}`, 'error');
+    // Initialize agent manager without Hedera tools as fallback
+    initializeAgentManager();
   }
+  
+  // Agent manager will be initialized by initializeAgentManager() calls above
   
   // Set up A2A server to receive messages from buyers
   const PORT = sellerConfig.port;

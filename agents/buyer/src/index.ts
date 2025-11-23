@@ -76,35 +76,53 @@ try {
   if (!hederaSecret) {
     await logger.log(`Warning: No Hedera secret found in ${buyerConfig.envFile}. Hedera features will be unavailable.`, 'error');
   } else {
-    // Initialize Hedera client (Testnet by default)
-    const hederaClient = Client.forTestnet().setOperator(
-      buyerConfig.walletAddress,
-      PrivateKey.fromStringECDSA(hederaSecret),
-    );
-    
-    // Log wallet ID
-    await logger.log(`Hedera Wallet ID: ${buyerConfig.walletAddress}`, 'info');
-    
-    // Check balance using AccountBalanceQuery
-    try {
-      const balanceQuery = new AccountBalanceQuery()
-        .setAccountId(buyerConfig.walletAddress);
-      const balance = await balanceQuery.execute(hederaClient);
-      buyerBalance = balance.hbars.toString();
-      await logger.log(`Hedera Balance: ${buyerBalance} HBAR`, 'info');
-    } catch (balanceError) {
-      await logger.log(`Failed to query balance: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`, 'error');
+    // Validate and clean the secret key
+    let secretKey: string;
+    if (typeof hederaSecret !== 'string') {
+      await logger.log(`Error: Hedera secret is not a string (got ${typeof hederaSecret}). Hedera features will be unavailable.`, 'error');
+      secretKey = '';
+    } else {
+      secretKey = hederaSecret.trim();
+      if (!secretKey) {
+        await logger.log(`Error: Hedera secret is empty. Hedera features will be unavailable.`, 'error');
+      }
     }
     
-    // Initialize Hedera AgentKit for use with Langchain agent
-    hederaAgentToolkit = new HederaLangchainToolkit({
-      client: hederaClient,
-      configuration: {
-        plugins: [coreQueriesPlugin]
-      },
-    });
+    if (secretKey) {
+      try {
+        // Initialize Hedera client (Testnet by default)
+        const hederaClient = Client.forTestnet().setOperator(
+          buyerConfig.walletAddress,
+          PrivateKey.fromStringECDSA(secretKey),
+        );
     
-    await logger.log(`Hedera AgentKit initialized successfully`, 'info');
+        // Log wallet ID
+        await logger.log(`Hedera Wallet ID: ${buyerConfig.walletAddress}`, 'info');
+        
+        // Check balance using AccountBalanceQuery
+        try {
+          const balanceQuery = new AccountBalanceQuery()
+            .setAccountId(buyerConfig.walletAddress);
+          const balance = await balanceQuery.execute(hederaClient);
+          buyerBalance = balance.hbars.toString();
+          await logger.log(`Hedera Balance: ${buyerBalance} HBAR`, 'info');
+        } catch (balanceError) {
+          await logger.log(`Failed to query balance: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`, 'error');
+        }
+        
+        // Initialize Hedera AgentKit for use with Langchain agent
+        hederaAgentToolkit = new HederaLangchainToolkit({
+          client: hederaClient,
+          configuration: {
+            plugins: [coreQueriesPlugin]
+          },
+        });
+        
+        await logger.log(`Hedera AgentKit initialized successfully`, 'info');
+      } catch (keyError) {
+        await logger.log(`Error creating Hedera private key: ${keyError instanceof Error ? keyError.message : String(keyError)}. Please check that HEDERA_SECRET in ${buyerConfig.envFile} is a valid hex-encoded private key.`, 'error');
+      }
+    }
   }
 } catch (hederaError) {
   await logger.log(`Error initializing Hedera: ${hederaError instanceof Error ? hederaError.message : String(hederaError)}`, 'error');

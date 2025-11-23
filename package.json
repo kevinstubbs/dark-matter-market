@@ -23,7 +23,8 @@
     "agents:seller:3": "cd agents/seller && node dist/index.js configs/seller_3.json",
     "agents:seller:4": "cd agents/seller && node dist/index.js configs/seller_4.json",
     "agents:seller:5": "cd agents/seller && node dist/index.js configs/seller_5.json",
-    "agents:start-all": "tsx scripts/start-all-agents.ts"
+    "agents:start-all": "tsx scripts/start-all-agents.ts",
+    "agents:stop-all": "tsx scripts/stop-all-agents.ts"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
