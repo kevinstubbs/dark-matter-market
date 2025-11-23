@@ -3,12 +3,22 @@
   "version": "1.0.0",
   "type": "module",
   "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.3",
     "@nomicfoundation/hardhat-ignition": "^3.0.5",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.1",
     "@types/node": "^22.8.5",
+    "ethers": "^6.15.0",
     "forge-std": "github:foundry-rs/forge-std#v1.9.4",
     "hardhat": "^3.0.15",
+    "tsx": "^4.20.6",
     "typescript": "~5.8.0",
     "viem": "^2.30.0"
+  },
+  "dependencies": {
+    "@hashgraph/sdk": "^2.0.0",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.1",
+    "dotenv": "^17.2.3",
+    "pg": "^8.11.3",
+    "redis": "^5.10.0"
   }
 }

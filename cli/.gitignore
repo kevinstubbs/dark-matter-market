@@ -5,3 +5,5 @@ dist/
 .env.local
 .env*.local
 
+
+src/*/**.d.ts*

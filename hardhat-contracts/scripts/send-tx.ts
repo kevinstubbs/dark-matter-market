@@ -23,7 +23,7 @@ console.log("Estimated L1 gas:", l1Gas);
 console.log("Sending L2 transaction");
 const tx = await senderClient.sendTransaction({
   to: senderClient.account.address,
-  value: 1n,
+  value: 10_000_000_000n,
 });
 
 await publicClient.waitForTransactionReceipt({ hash: tx });

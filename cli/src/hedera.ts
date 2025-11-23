@@ -29,10 +29,15 @@ export async function fetchTopicMessages(
   topicId: string,
   chainId: number
 ): Promise<TopicMessage[]> {
-  const isMainnet = chainId === 295;
-  const baseUrl = isMainnet
-    ? config.hedera.mirrorNodeUrl.mainnet
-    : config.hedera.mirrorNodeUrl.testnet;
+  // Chain ID 295 = mainnet, 296 = testnet, 298 = localhost
+  let baseUrl: string;
+  if (chainId === 295) {
+    baseUrl = config.hedera.mirrorNodeUrl.mainnet;
+  } else if (chainId === 298) {
+    baseUrl = config.hedera.mirrorNodeUrl.localhost;
+  } else {
+    baseUrl = config.hedera.mirrorNodeUrl.testnet;
+  }
 
   const allMessages: TopicMessage[] = [];
   let nextUrl: string | null = null;

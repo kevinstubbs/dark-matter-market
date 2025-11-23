@@ -7,7 +7,7 @@ import { A2AExpressApp } from '@a2a-js/sdk/server/express';
 import { RequestContext, ExecutionEventBus, AgentExecutor } from '@a2a-js/sdk/server';
 import { config } from 'dotenv';
 import { Client, PrivateKey, AccountBalanceQuery } from '@hashgraph/sdk';
-import { HederaLangchainToolkit, coreQueriesPlugin } from 'hedera-agent-kit';
+import { HederaLangchainToolkit, coreQueriesPlugin, coreConsensusPlugin } from 'hedera-agent-kit';
 import { loadUserContext, UserContext, getSellerConfig } from './preferences.js';
 import { handleIncomingMessage, handleCompetingOfferResponse } from './message-handler.js';
 import { AgentLogger, getAgentIdFromUrl } from '@dmm/agents-shared';
@@ -29,6 +29,7 @@ let globalLogger: AgentLogger | null = null;
 
 // Store Hedera agent toolkit globally for use in executor and message handler
 let globalHederaAgentToolkit: HederaLangchainToolkit | undefined;
+
 
 async function main() {
   // Load seller config from JSON file
@@ -112,7 +113,7 @@ async function main() {
           globalHederaAgentToolkit = new HederaLangchainToolkit({
             client: hederaClient,
             configuration: {
-              plugins: [coreQueriesPlugin]
+              plugins: [coreQueriesPlugin, coreConsensusPlugin]
             },
           });
           
@@ -343,7 +344,7 @@ class SellerExecutor implements AgentExecutor {
     }
     
     // Handle the incoming message (pass all buyer clients for auction mechanism)
-    await handleIncomingMessage(buyerId, client, userMessage, task, globalUserContext, buyerClients, globalLogger!);
+    await handleIncomingMessage(buyerId, client, userMessage, task, globalUserContext, buyerClients, globalLogger!, globalHederaAgentToolkit);
     
     // Mark task as completed
     eventBus.publish({

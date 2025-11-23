@@ -5,11 +5,12 @@ import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { A2AExpressApp } from '@a2a-js/sdk/server/express';
 import { config } from 'dotenv';
 import { Client, PrivateKey, AccountBalanceQuery } from '@hashgraph/sdk';
-import { HederaLangchainToolkit, coreQueriesPlugin } from 'hedera-agent-kit';
+import { HederaLangchainToolkit, coreQueriesPlugin, coreConsensusPlugin } from 'hedera-agent-kit';
 import { BuyerExecutor } from './executor.js';
 import { getBuyerConfig } from './preferences.js';
 import { AgentLogger, getHederaSecret } from '@dmm/agents-shared';
 import { resolve } from 'path';
+import { ensureVoteCast } from './vote-handler.js';
 
 // Load environment variables (for ANTHROPIC_API_KEY, etc.)
 config();
@@ -114,11 +115,50 @@ try {
         hederaAgentToolkit = new HederaLangchainToolkit({
           client: hederaClient,
           configuration: {
-            plugins: [coreQueriesPlugin]
+            plugins: [coreQueriesPlugin, coreConsensusPlugin]
           },
         });
         
         await logger.log(`Hedera AgentKit initialized successfully`, 'info');
+        
+        // Check if buyer needs to cast a vote at startup
+        // Get topic ID and proposal sequence number from environment or config
+        const topicId = process.env.DMM_TOPIC_ID || buyerConfig.topicId;
+        const proposalSequenceNumber = process.env.PROPOSAL_SEQUENCE_NUMBER 
+          ? parseInt(process.env.PROPOSAL_SEQUENCE_NUMBER, 10) 
+          : buyerConfig.proposalSequenceNumber;
+        
+        if (topicId && proposalSequenceNumber && buyerConfig.desiredOutcome) {
+          try {
+            await logger.log(`Checking if vote needs to be cast for proposal ${proposalSequenceNumber}...`, 'info');
+            const voteCast = await ensureVoteCast(
+              hederaAgentToolkit,
+              topicId,
+              proposalSequenceNumber,
+              buyerConfig.walletAddress,
+              buyerConfig.desiredOutcome,
+              logger
+            );
+            if (voteCast) {
+              await logger.log(`Vote successfully cast at startup`, 'vote-cast');
+            }
+          } catch (voteError) {
+            await logger.error(
+              `Failed to check/cast vote at startup: ${voteError instanceof Error ? voteError.message : String(voteError)}`
+            );
+            // Don't fail startup if vote check fails - log and continue
+          }
+        } else {
+          if (!topicId) {
+            await logger.log(`DMM_TOPIC_ID not set, skipping vote check`, 'info');
+          }
+          if (!proposalSequenceNumber) {
+            await logger.log(`PROPOSAL_SEQUENCE_NUMBER not set, skipping vote check`, 'info');
+          }
+          if (!buyerConfig.desiredOutcome) {
+            await logger.log(`No desiredOutcome in config, skipping vote check`, 'info');
+          }
+        }
       } catch (keyError) {
         await logger.log(`Error creating Hedera private key: ${keyError instanceof Error ? keyError.message : String(keyError)}. Please check that HEDERA_SECRET in ${buyerConfig.envFile} is a valid hex-encoded private key.`, 'error');
       }

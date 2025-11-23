@@ -10,7 +10,7 @@ import { Client } from 'pg';
 
 const client = new Client({
   connectionString: process.env.DATABASE_URL
-   || 'postgresql://postg55res:postg33res@localhost:5432/dark_matter_market'
+   || 'postgresql://postgres:postgres@localhost:6100/dark_matter_market'
 });
 
 async function seed() {

@@ -45,7 +45,7 @@ interface TokenInfoResponse {
  * This endpoint is cacheable and will return token information
  * 
  * Query parameters:
- * - chainId: Optional chain ID (295 for mainnet, 296 for testnet). Defaults to testnet.
+ * - chainId: Optional chain ID (295 for mainnet, 296 for testnet, 298 for localhost). Defaults to testnet.
  */
 export async function GET(
   request: NextRequest,
@@ -64,13 +64,19 @@ export async function GET(
     }
 
     // Determine network from chainId or use testnet as default
-    // Chain ID 295 = mainnet, 296 = testnet
-    const isMainnet = chainId === '295';
-    const mirrorNodeUrl = process.env.HEDERA_MIRROR_NODE_URL || 
-      (isMainnet 
-        ? 'https://mainnet-public.mirrornode.hedera.com'
-        : 'https://testnet.mirrornode.hedera.com');
+    // Chain ID 295 = mainnet, 296 = testnet, 298 = localhost
+    let mirrorNodeUrl: string;
+    if (chainId === '298') {
+      mirrorNodeUrl = process.env.HEDERA_MIRROR_NODE_URL || 'http://localhost:5551';
+    } else {
+      const isMainnet = chainId === '295';
+      mirrorNodeUrl = process.env.HEDERA_MIRROR_NODE_URL || 
+        (isMainnet 
+          ? 'https://mainnet-public.mirrornode.hedera.com'
+          : 'https://testnet.mirrornode.hedera.com');
+    }
     
+    console.log(`Fetching token info from ${mirrorNodeUrl}/api/v1/tokens/${tokenId}`), chainId;
     const response = await fetch(
       `${mirrorNodeUrl}/api/v1/tokens/${tokenId}`,
       {

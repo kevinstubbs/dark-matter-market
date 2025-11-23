@@ -9,11 +9,11 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@hashgraph/sdk": "^2.0.0"
+    "@hashgraph/sdk": "^2.0.0",
+    "redis": "^5.10.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   }
 }
-

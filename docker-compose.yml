@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: dark_matter_market
     ports:
-      - "5432:5432"
+      - "6100:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./web/database/init:/docker-entrypoint-initdb.d
@@ -23,7 +23,7 @@ services:
     image: redis:7-alpine
     container_name: dark-matter-redis
     ports:
-      - "7000:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -39,7 +39,7 @@ services:
       dockerfile: Dockerfile
     container_name: dark-matter-web
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/dark_matter_market
       - REDIS_URL=redis://redis:6379

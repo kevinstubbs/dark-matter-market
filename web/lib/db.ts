@@ -29,7 +29,7 @@ export interface DMMWithProposals extends DMM {
 
 async function getClient(): Promise<Client> {
   const client = new Client({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/dark_matter_market'
+    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:6100/dark_matter_market'
   });
   await client.connect();
   return client;
@@ -37,12 +37,12 @@ async function getClient(): Promise<Client> {
 
 export async function getAllDMMs(): Promise<DMM[]> {
   const client = await getClient();
-  
+
   try {
     const result = await client.query<DMM>(
       'SELECT id, name, description, topic_id, token_id, chain_id, created_at, updated_at FROM dmms ORDER BY created_at DESC'
     );
-    
+
     return result.rows;
   } catch (error) {
     console.error('Error fetching DMMs:', error);
@@ -54,18 +54,18 @@ export async function getAllDMMs(): Promise<DMM[]> {
 
 export async function getAllDMMsWithProposals(): Promise<DMMWithProposals[]> {
   const client = await getClient();
-  
+
   try {
     // Fetch all DMMs
     const dmmsResult = await client.query<DMM>(
       'SELECT id, name, description, topic_id, token_id, chain_id, created_at, updated_at FROM dmms ORDER BY created_at DESC'
     );
-    
+
     // Fetch all proposals
     const proposalsResult = await client.query<Proposal>(
       'SELECT id, dmm_id, name, description, quorum, voting_deadline, status, created_at, updated_at FROM proposals ORDER BY created_at DESC'
     );
-    
+
     // Group proposals by DMM
     const proposalsByDmm = new Map<number, Proposal[]>();
     for (const proposal of proposalsResult.rows) {
@@ -73,7 +73,7 @@ export async function getAllDMMsWithProposals(): Promise<DMMWithProposals[]> {
       existing.push(proposal);
       proposalsByDmm.set(proposal.dmm_id, existing);
     }
-    
+
     // Combine DMMs with their proposals
     return dmmsResult.rows.map(dmm => ({
       ...dmm,

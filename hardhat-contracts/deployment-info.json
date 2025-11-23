@@ -1,0 +1,58 @@
+{
+  "network": "localhost",
+  "tokenId": "0.0.1037",
+  "topicId": "0.0.1038",
+  "contractId": "0x8A7fa94487d0d0460550e5F3F80A663c39Ac8B10",
+  "accounts": {
+    "admin": "0.0.1002",
+    "buyers": [
+      {
+        "id": "0.0.1002",
+        "amount": 15000
+      },
+      {
+        "id": "0.0.1003",
+        "amount": 20000
+      }
+    ],
+    "sellers": [
+      {
+        "id": "0.0.1004",
+        "amount": 12000
+      },
+      {
+        "id": "0.0.1005",
+        "amount": 18000
+      },
+      {
+        "id": "0.0.1006",
+        "amount": 25000
+      },
+      {
+        "id": "0.0.1007",
+        "amount": 10000
+      },
+      {
+        "id": "0.0.1008",
+        "amount": 30000
+      }
+    ],
+    "votingPower": [
+      {
+        "id": "0.0.1029",
+        "amount": 0,
+        "label": "yes"
+      },
+      {
+        "id": "0.0.1030",
+        "amount": 0,
+        "label": "no"
+      },
+      {
+        "id": "0.0.1031",
+        "amount": 0,
+        "label": "abstain"
+      }
+    ]
+  }
+}

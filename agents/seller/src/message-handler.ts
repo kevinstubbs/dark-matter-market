@@ -3,6 +3,7 @@ import { Message, Task } from '@a2a-js/sdk';
 import { VoteOffer, VoteOfferResponse, CompetingOfferRequest, CompetingOfferResponse, AgentLogger } from '@dmm/agents-shared';
 import { UserContext } from './preferences.js';
 import { evaluateOffer } from './negotiation.js';
+import type { HederaLangchainToolkit } from 'hedera-agent-kit';
 
 export interface NegotiationState {
   offer: VoteOffer;
@@ -23,6 +24,86 @@ interface CompetingOffer {
 }
 
 const competingOffers = new Map<string, CompetingOffer[]>(); // taskId -> competing offers
+
+/**
+ * Submit a vote message to an HCS topic using the Hedera Agent Kit
+ */
+async function submitVoteToHCSTopic(
+  hederaAgentToolkit: HederaLangchainToolkit,
+  topicId: string,
+  proposalSequenceNumber: number,
+  desiredOutcome: string,
+  logger?: AgentLogger
+): Promise<void> {
+  try {
+    // Normalize the desired outcome to match vote format
+    // Map common variations to standard options
+    let voteOption = desiredOutcome.toLowerCase();
+    if (voteOption === 'against' || voteOption === 'no') {
+      voteOption = 'against';
+    } else if (voteOption === 'yes' || voteOption === 'for' || voteOption === 'approve') {
+      voteOption = 'yes';
+    } else if (voteOption === 'abstain' || voteOption === 'abstention') {
+      voteOption = 'abstain';
+    }
+
+    // Create vote message in the format expected by the governance system
+    const voteMessage = {
+      option: voteOption,
+      referendumType: 'Election',
+      sequenceNumber: proposalSequenceNumber,
+      type: 'Vote',
+      version: 1,
+    };
+
+    const messageJson = JSON.stringify(voteMessage);
+
+    // Get the tools from the toolkit
+    const tools = hederaAgentToolkit.getTools();
+    
+    // Find the submit topic message tool from the consensus plugin
+    const submitTool = tools.find((tool: any) => 
+      tool.name && (
+        tool.name.includes('submit') && 
+        tool.name.includes('topic') && 
+        tool.name.includes('message')
+      )
+    );
+
+    if (!submitTool) {
+      throw new Error('Could not find submit topic message tool in Hedera Agent Kit');
+    }
+
+    // Invoke the tool to submit the message
+    const result = await submitTool.invoke({
+      topicId: topicId,
+      message: messageJson,
+    });
+
+    if (logger) {
+      await logger.log(
+        `Vote submitted to HCS topic ${topicId} for proposal ${proposalSequenceNumber}`,
+        'vote-submitted'
+      );
+      await logger.log(`Vote option: ${voteOption}`, 'info');
+      if (result && typeof result === 'object') {
+        if (result.transactionId) {
+          await logger.log(`Transaction ID: ${result.transactionId}`, 'info');
+        }
+        if (result.sequenceNumber !== undefined) {
+          await logger.log(`Message sequence number: ${result.sequenceNumber}`, 'info');
+        }
+      }
+    }
+  } catch (error) {
+    if (logger) {
+      await logger.error(
+        `Failed to submit vote to HCS topic: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    throw error;
+  }
+}
 
 /**
  * Parse a VoteOffer from a message
@@ -164,7 +245,8 @@ export async function handleIncomingMessage(
   task: Task | undefined,
   userContext: UserContext,
   allBuyerClients?: Map<string, A2AClient>,
-  logger?: AgentLogger
+  logger?: AgentLogger,
+  hederaAgentToolkit?: HederaLangchainToolkit
 ): Promise<void> {
   const offer = parseVoteOffer(message);
   
@@ -337,6 +419,38 @@ export async function handleIncomingMessage(
     if (response.accepted) {
       if (logger) await logger.negotiationSucceeded(`Negotiation completed successfully with ${buyerId}!`, buyerId);
       if (logger) await logger.log(`Sent acceptance to ${buyerId}`, 'info', buyerId, true);
+      
+      // Submit vote to HCS topic when agreement is reached
+      if (hederaAgentToolkit && offer.proposal.dmmTopicId && offer.proposal.proposalSequenceNumber) {
+        try {
+          await submitVoteToHCSTopic(
+            hederaAgentToolkit,
+            offer.proposal.dmmTopicId,
+            offer.proposal.proposalSequenceNumber,
+            offer.desiredOutcome,
+            logger
+          );
+        } catch (error) {
+          if (logger) {
+            await logger.error(
+              `Failed to submit vote to HCS topic after agreement: ${error instanceof Error ? error.message : String(error)}`,
+              buyerId
+            );
+          }
+          // Don't fail the negotiation if vote submission fails - log and continue
+        }
+      } else {
+        if (logger) {
+          if (!hederaAgentToolkit) {
+            await logger.log('Hedera Agent Toolkit not available, skipping HCS topic vote submission', 'info', buyerId);
+          } else if (!offer.proposal.dmmTopicId) {
+            await logger.log('Topic ID not available in proposal, skipping HCS topic vote submission', 'info', buyerId);
+          } else if (!offer.proposal.proposalSequenceNumber) {
+            await logger.log('Proposal sequence number not available, skipping HCS topic vote submission', 'info', buyerId);
+          }
+        }
+      }
+      
       activeNegotiations.delete(taskId);
     } else if (response.counterOffer) {
       // Continue negotiation - wait for buyer's response

@@ -2,7 +2,7 @@
   "id": "seller-1",
   "name": "Seller 1 - Airdrop Hater",
   "port": 4001,
-  "walletAddress": "0.0.7305590",
+  "walletAddress": "0.0.1004",
   "envFile": ".env.seller-1",
   "instructions": "Always vote no for airdrops. Willing to sell votes for other proposals if the price is right.",
   "minPrice": "10",

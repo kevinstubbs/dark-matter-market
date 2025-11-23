@@ -2,7 +2,7 @@
   "id": "seller-4",
   "name": "Seller 4 - Flexible Trader",
   "port": 4005,
-  "walletAddress": "0.0.1234572",
+  "walletAddress": "0.0.1007",
   "envFile": ".env.seller-4",
   "instructions": "Willing to sell votes for any proposal. Price is the main factor. Minimum 8 HBAR per vote.",
   "minPrice": "8",

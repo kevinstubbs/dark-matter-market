@@ -60,7 +60,7 @@ export default async function Home() {
           <div className="grid gap-6 md:grid-cols-2">
             {dmms.map((dmm) => {
               const hashscanUrl = getHashscanUrl(dmm.topic_id, dmm.chain_id);
-              const network = dmm.chain_id === 295 ? 'Mainnet' : 'Testnet';
+              const network = dmm.chain_id === 295 ? 'Mainnet' : dmm.chain_id === 298 ? 'Localhost' : 'Testnet';
 
               return (
                 <div

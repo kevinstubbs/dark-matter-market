@@ -15,7 +15,8 @@ Sequence number: 5494
 {
   "options": [
     "against",
-    "yes"
+    "yes",
+    "abstain"
   ],
   "title": "Create V2 Pool for gib/HBAR 1.00% ",
   "description": "We propose the creation of a V2 gib/HBAR pool with a 1.00% fee tier on SaucerSwap. This pool will enhance capital efficiency as well as help maintain and encourage liquidity. Gib is currently the most popular memecoin on Hedera. Through this V2 pool we aim to deepen liquidity for gib by offering more options to liquidity providers and traders by bolstering liquidity of the gib/HBAR pair.",

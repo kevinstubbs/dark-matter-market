@@ -2,7 +2,7 @@
   "id": "buyer-1",
   "name": "Buyer 1 - Yes Supporter",
   "port": 4000,
-  "walletAddress": "0.0.1234567",
+  "walletAddress": "0.0.1002",
   "envFile": ".env.buyer-1",
   "instructions": "I want votes for proposals that increase liquidity and improve the DeFi ecosystem. I support proposals that benefit token holders.",
   "desiredOutcome": "yes",

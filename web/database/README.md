@@ -45,7 +45,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dark_matter_market
 
 # For node-pg-migrate
 PGHOST=localhost
-PGPORT=5432
+PGPORT=6100
 PGDATABASE=dark_matter_market
 PGUSER=postgres
 PGPASSWORD=postgres
